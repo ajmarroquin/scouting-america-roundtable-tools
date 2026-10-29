@@ -1,0 +1,27 @@
+# dependencies and build output
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.vercel/
+
+# env files and secrets
+.env
+.env.*
+!.env.example
+
+# real data never goes in this public repo
+*.csv
+*.xlsx
+*.xls
+!tests/fixtures/*.csv
+!tests/fixtures/*.xlsx
+
+# supabase local state
+supabase/.temp/
+supabase/.branches/
+
+# os and editor
+.DS_Store
+*.log
