@@ -17,7 +17,7 @@ export const TOOLS: Tool[] = [
     description: "Adult leaders and the units they serve. Import, search, copy emails, export.",
     href: "/contacts",
     minRole: "viewer",
-    status: "soon",
+    status: "live",
   },
   {
     slug: "attendance",

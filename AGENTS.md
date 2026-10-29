@@ -15,5 +15,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - All database access goes through `lib/db` on the server. Every server action and route handler checks the caller with `requireUser()` or `requireRole()` from `lib/auth/session.ts`.
 - Session reads must sit inside a `<Suspense>` boundary (Cache Components is on).
 - Schema changes: edit `lib/db/schema.ts`, run `npm run db:generate`, commit the SQL in `drizzle/`. Production applies it during the build.
-- Before pushing: `npm run lint && npm run typecheck && npm test && npm run build`.
+- Before pushing: `npm run lint && npm run typecheck && npm test && npm run build`. Set `TEST_DATABASE_URL` to a local throwaway Postgres to also run the database tests (`*.db.test.ts`); they drop and rebuild its schema.
 - See `docs/PLAN.md` for scope and `docs/SETUP.md` for hosting.

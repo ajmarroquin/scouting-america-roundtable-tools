@@ -13,7 +13,11 @@ if (!requested) {
   process.exit(0);
 }
 
-const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+// Same rule as lib/db/url.ts: previews never touch the production database.
+const url =
+  process.env.VERCEL_ENV === "preview"
+    ? process.env.PREVIEW_DATABASE_URL
+    : process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 if (!url) {
   console.error(
     "migrate: no database configured. Add Neon from the Vercel project's Storage tab " +

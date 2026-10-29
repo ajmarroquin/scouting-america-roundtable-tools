@@ -3,12 +3,14 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -113,3 +115,107 @@ export const auditLog = pgTable(
   },
   (t) => [index("audit_log_at_idx").on(t.at)],
 );
+
+// Contacts. Shapes follow docs/PLAN.md. Units and affiliations come from the
+// roster import; people can also be added by hand.
+
+export const importRun = pgTable("import_run", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+  actorEmail: text("actor_email"),
+  fileName: text("file_name"),
+  district: text("district").notNull(),
+  counts: jsonb("counts").$type<Record<string, number>>().notNull(),
+});
+
+export const unit = pgTable(
+  "unit",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Scouting America's unit ID. Present for every unit that came from an import.
+    bsaUnitId: text("bsa_unit_id").unique(),
+    type: text("type").notNull(),
+    number: integer("number").notNull(),
+    // B, G, or F from the export's GenderAccepted. Linked troops differ only here.
+    genderAccepted: text("gender_accepted"),
+    charteredOrg: text("chartered_org"),
+    district: text("district"),
+    // False once a later import no longer lists the unit.
+    active: boolean("active").notNull().default(true),
+    lastImportId: uuid("last_import_id").references(() => importRun.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("unit_type_number_idx").on(t.type, t.number)],
+);
+
+export const CONTACT_STATUSES = ["active", "not_in_roster", "archived"] as const;
+export const CONTACT_SOURCES = ["import", "manual", "walk_in"] as const;
+
+export const contact = pgTable(
+  "contact",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    memberId: text("member_id").unique(),
+    firstName: text("first_name").notNull(),
+    middleName: text("middle_name"),
+    lastName: text("last_name").notNull().default(""),
+    suffix: text("suffix"),
+    preferredName: text("preferred_name"),
+    email: text("email"),
+    altEmail: text("alt_email"),
+    phone: text("phone"),
+    phoneType: text("phone_type"),
+    isYouth: boolean("is_youth").notNull().default(false),
+    guardianEmail: text("guardian_email"),
+    notes: text("notes"),
+    status: text("status").notNull().default("active"),
+    source: text("source").notNull().default("manual"),
+    // The export flags people registered in more than one place but lists them once.
+    multipleRegistrations: boolean("multiple_registrations").notNull().default(false),
+    lastImportId: uuid("last_import_id").references(() => importRun.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("contact_email_idx").on(t.email),
+    index("contact_name_idx").on(t.lastName, t.firstName),
+    check("contact_status_check", sql`${t.status} in ('active', 'not_in_roster', 'archived')`),
+    check("contact_source_check", sql`${t.source} in ('import', 'manual', 'walk_in')`),
+    // Youth Protection: no youth contact without a parent or guardian to copy.
+    check("contact_youth_guardian_check", sql`not ${t.isYouth} or ${t.guardianEmail} is not null`),
+  ],
+);
+
+export const affiliation = pgTable(
+  "affiliation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contact.id, { onDelete: "cascade" }),
+    // Null for district positions such as Unit Commissioner.
+    unitId: uuid("unit_id").references(() => unit.id, { onDelete: "cascade" }),
+    district: text("district"),
+    position: text("position").notNull(),
+    registrationStatus: text("registration_status"),
+    expiresOn: date("expires_on", { mode: "string" }),
+    // Imports replace their own rows; hand-added rows are never touched by an import.
+    source: text("source").notNull().default("manual"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique("affiliation_contact_unit_position_key").on(t.contactId, t.unitId, t.position).nullsNotDistinct(),
+    index("affiliation_contact_idx").on(t.contactId),
+    index("affiliation_unit_idx").on(t.unitId),
+    check("affiliation_source_check", sql`${t.source} in ('import', 'manual')`),
+  ],
+);
+
+export const setting = pgTable("setting", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: updatedAt(),
+});

@@ -99,6 +99,10 @@ Project → Settings → **Environment Variables**, environment **Production**. 
 3. Add the rest of the team under **Users**.
 4. `BOOTSTRAP_ADMIN_EMAILS` does nothing once an admin exists. Remove it whenever you like.
 
+## Preview deployments
+
+Preview builds never use the production database. The Neon integration attaches `DATABASE_URL` to Preview too, but the app ignores it there and reads only `PREVIEW_DATABASE_URL`. To give previews a database later: create a branch in Neon (from an empty or fake-data parent, not from production, because branches copy their parent's data), and set its connection string as `PREVIEW_DATABASE_URL` for the Preview environment.
+
 ## 7. Repo security
 
 GitHub → repo **Settings** → **Code security**: turn on **Secret Protection** and **Push protection**. Both are free for public repos and block commits that contain keys.
