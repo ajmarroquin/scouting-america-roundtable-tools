@@ -10,12 +10,14 @@ import { account, rateLimit, session, user, verification } from "@/lib/db/schema
 import { sendEmail } from "@/lib/email/send";
 import { SIGN_IN_CODE_MINUTES, signInCodeEmail } from "@/lib/email/sign-in-code";
 import { ensureBootstrapAdmin } from "./bootstrap";
+import { trustedOriginsFromEnv } from "./origins";
 
 const DAY = 60 * 60 * 24;
 
 export const auth = betterAuth({
   appName: "Roundtable Tools",
   baseURL: process.env.BETTER_AUTH_URL,
+  trustedOrigins: trustedOriginsFromEnv(process.env),
   secret: process.env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(db, {
     provider: "pg",

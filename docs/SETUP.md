@@ -11,6 +11,32 @@ One-time setup for production. Takes about 30 minutes plus DNS wait time. Accoun
 
 `mail.` is verified in Resend instead of `rpc.` because Resend's free plan allows one sending domain. A future pack app at `app.pack662nyc.com` can send from the same verified domain.
 
+## Fast path: signed in within about 10 minutes, before DNS
+
+DNS and Resend domain verification can lag, so this gets the first admin in on the `*.vercel.app` address using Resend's test sender. The test sender only delivers to the email that owns the Resend account, which is enough to sign in as the first admin. Everyone else waits for steps 3 and 4 below.
+
+1. **Import.** vercel.com/new → import this repo → name `roundtable-tools` → **Deploy** with no environment variables. The build passes and skips migrations.
+2. **Database.** Project → **Storage** → **Create Database** → **Neon** → Free → US East. Connect to **Production** and **Development** only.
+3. **Resend.** Sign up at resend.com with the email you'll sign in with. **API Keys** → create one with **Sending access**.
+4. **Environment variables.** Project → Settings → **Environment Variables** → Production. Paste this block into the first key field and Vercel splits it into rows. Fill in the two blanks and mark those two **Sensitive**:
+
+   ```
+   BETTER_AUTH_URL=https://rpc.pack662nyc.com
+   EMAIL_FROM=Roundtable Tools <onboarding@resend.dev>
+   BOOTSTRAP_ADMIN_EMAILS=
+   RUN_MIGRATIONS=true
+   BETTER_AUTH_SECRET=
+   RESEND_API_KEY=
+   ```
+
+   `BOOTSTRAP_ADMIN_EMAILS` is the same email as the Resend account. `BETTER_AUTH_SECRET` is any random string of 32+ characters.
+5. **Redeploy.** Deployments → the latest one → **⋯** → **Redeploy**. This build creates the database tables.
+6. **Sign in.** Open the production `*.vercel.app` URL shown on the project page. Vercel asks you to log in to Vercel first, which keeps that address private to you. Enter your email, then the code.
+
+When DNS is ready, finish steps 3 and 4 below, change `EMAIL_FROM` to `Roundtable Tools <no-reply@mail.pack662nyc.com>`, and redeploy. Then add the rest of the team.
+
+The `*.vercel.app` addresses keep working after the custom domain is live. The app trusts them automatically.
+
 ## 1. Create the Vercel project
 
 1. Go to vercel.com/new while signed in to the personal account.
