@@ -17,7 +17,7 @@ DNS and Resend domain verification can lag, so this gets the first admin in on t
 
 1. **Import.** vercel.com/new → import this repo → name `roundtable-tools` → **Deploy** with no environment variables. The build passes and skips migrations.
 2. **Database.** Project → **Storage** → **Create Database** → **Neon** → Free → US East. Connect to **Production** and **Development** only.
-3. **Resend.** Sign up at resend.com with the email you'll sign in with. **API Keys** → create one with **Sending access**.
+3. **Resend.** Either add Resend from the project's **Integrations** (Vercel Marketplace), which sets `RESEND_API_KEY` and `RESEND_EMAIL_DOMAIN` for you, or sign up at resend.com and create an API key with **Sending access**. With the integration, the app sends from `no-reply@` that domain unless `EMAIL_FROM` is set, and the domain still has to be verified in Resend before mail goes out.
 4. **Environment variables.** Project → Settings → **Environment Variables** → Production. Paste this block into the first key field and Vercel splits it into rows. Fill in the two blanks and mark those two **Sensitive**:
 
    ```
