@@ -1,5 +1,5 @@
 import "server-only";
-import { db } from "@/lib/db";
+import { db, type Tx } from "@/lib/db";
 import { auditLog } from "@/lib/db/schema";
 
 type Actor = { id: string; email: string } | null;
@@ -9,8 +9,9 @@ export async function writeAudit(
   action: string,
   target: { type: string; id?: string | null },
   detail?: Record<string, unknown>,
+  executor: typeof db | Tx = db,
 ): Promise<void> {
-  await db.insert(auditLog).values({
+  await executor.insert(auditLog).values({
     actorId: actor?.id ?? null,
     actorEmail: actor?.email ?? null,
     action,

@@ -1,6 +1,6 @@
 # Roundtable Tools: Build Plan
 
-Status: v3, October 2026. Phase 0 is built and waiting on hosting setup (see `docs/SETUP.md`).
+Status: v4, October 2026. Phases 0 to 2 are built: sign-in, users, contacts, and roster import. Live at `rpc.pack662nyc.com`.
 
 ## What this is
 
@@ -198,7 +198,7 @@ The repo is public, so the code assumes anyone can read it.
 - **Roles**: admin (users, imports, deletes, merges, settings), editor (contacts, attendance), viewer (read, export, copy emails).
 - **Data minimization**: only the columns listed above are stored. Youth are never imported.
 - **Hosting protection**: Vercel Authentication stays on for preview deployments and the `*.vercel.app` URLs. The app is public only on its custom domain, where our own sign-in applies.
-- **Environments**: Neon's `main` branch is production. A `dev` branch holds synthetic seed data. Preview deployments use `dev`, never a copy of production, because a Neon branch copies its parent's data.
+- **Environments**: Neon's `main` branch is production. Preview deployments never get `DATABASE_URL`, even though the Neon integration attaches it to Preview: `lib/db/url.ts` gives previews only `PREVIEW_DATABASE_URL`, meant for a Neon branch with fake data. Until that's set, previews have no database.
 - **Backups**: the free tier's restore window is short. The admin page gets a full backup export (every table, XLSX and JSON).
 
 ## Domain and DNS
@@ -215,8 +215,8 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | Phase | Scope | Size | Main risk |
 | --- | --- | --- | --- |
 | 0. Foundation (built) | Vercel project, Neon, custom subdomain, Resend domain, Better Auth OTP, users and roles, hub shell, CI | M | DNS and email deliverability |
-| 1. Contacts | Units, contacts, affiliations; filters; copy emails; manual youth with parent email; CSV and XLSX export | M | Low |
-| 2. Import | Roster parser, youth and district filters, dedupe, review queue, preview, save, log | L | Fuzzy match quality |
+| 1. Contacts (built) | Units, contacts, affiliations; filters; copy emails; manual youth with parent email; CSV and XLSX export | M | Low |
+| 2. Import (built) | Roster parser, youth and district filters, dedupe, preview, save, log. Fuzzy review queue moves to Phase 3, where walk-ins and the legacy sheets need it. | L | Fuzzy match quality |
 | 3. Attendance | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
 | 4. Metrics | Dashboard, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
@@ -235,6 +235,14 @@ Each phase ships to the production URL behind login and gets used at the next ro
 - CI on every PR: lint, typecheck, unit tests, build.
 
 Verified locally against Postgres 16 with a browser test: unknown email gets no code; bootstrap admin signs in; add, duplicate, role change, and last-admin guard; sign-out; viewer can't see or open admin pages; the auth API refuses a self-assigned role; wrong codes lock out; code requests are rate-limited.
+
+## Phases 1 and 2: what was built
+
+- **Contacts** (`/contacts`): search; filters for program, unit, position, email, and status; copy emails with comma or semicolon separators and optional batches of 50 or 100, guardian emails included for youth; export to CSV, Excel, or a Resend contact list. Exports neutralize spreadsheet formulas.
+- **Contact page**: roster details, preferred name and notes, positions added by hand (for "Multiple" registrations), archive and restore. Roster fields are read-only there; imports own them.
+- **Add contact** (editors): walk-ins and youth. Youth require a parent or guardian email, enforced by a database constraint.
+- **Import** (admins): parse in the browser, pick the district, see what's in the file, compare with current contacts, confirm. One transaction per import, serialized with an advisory lock. Logged in `import_run` and `audit_log` with counts only.
+- **Tests**: the parser and import plan are covered against the synthetic fixture; the database write runs against a real Postgres in CI.
 
 ## Open questions
 
