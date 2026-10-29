@@ -1,0 +1,31 @@
+# dependencies and build output
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.vercel/
+
+# env files and secrets
+.env
+.env.*
+!.env.example
+
+# real data never goes in this public repo
+*.csv
+*.xlsx
+*.xls
+!tests/fixtures/*.csv
+!tests/fixtures/*.xlsx
+
+# os and editor
+.DS_Store
+*.log
+
+# next.js and typescript
+.pnp
+.pnp.*
+*.tsbuildinfo
+next-env.d.ts
+*.pem
+npm-debug.log*
