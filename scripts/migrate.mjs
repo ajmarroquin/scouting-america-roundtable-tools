@@ -15,7 +15,10 @@ if (!requested) {
 
 const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 if (!url) {
-  console.error("migrate: DATABASE_URL_UNPOOLED or DATABASE_URL must be set");
+  console.error(
+    "migrate: no database configured. Add Neon from the Vercel project's Storage tab " +
+      "(Production environment), then redeploy. Or unset RUN_MIGRATIONS.",
+  );
   process.exit(1);
 }
 

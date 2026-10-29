@@ -1,5 +1,6 @@
 import "server-only";
 import { Resend } from "resend";
+import { senderAddress } from "./sender";
 
 type Message = { to: string; subject: string; text: string; html: string };
 
@@ -14,8 +15,8 @@ export async function sendEmail(message: Message): Promise<void> {
     return;
   }
 
-  const from = process.env.EMAIL_FROM;
-  if (!from) throw new Error("EMAIL_FROM is not set");
+  const from = senderAddress(process.env);
+  if (!from) throw new Error("Set EMAIL_FROM, or connect Resend so RESEND_EMAIL_DOMAIN is set");
 
   const { error } = await new Resend(apiKey).emails.send({
     from,
