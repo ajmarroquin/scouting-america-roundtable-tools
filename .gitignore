@@ -18,10 +18,14 @@ coverage/
 !tests/fixtures/*.csv
 !tests/fixtures/*.xlsx
 
-# supabase local state
-supabase/.temp/
-supabase/.branches/
-
 # os and editor
 .DS_Store
 *.log
+
+# next.js and typescript
+.pnp
+.pnp.*
+*.tsbuildinfo
+next-env.d.ts
+*.pem
+npm-debug.log*

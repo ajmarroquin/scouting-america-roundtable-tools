@@ -1,0 +1,29 @@
+// Applies pending migrations in ./drizzle.
+//
+// Runs during `npm run build` only when RUN_MIGRATIONS=true, which is set for
+// Vercel's Production environment and nowhere else. Preview builds never touch
+// the production schema. Locally, `npm run db:migrate` passes --now.
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import pg from "pg";
+
+const requested = process.argv.includes("--now") || process.env.RUN_MIGRATIONS?.trim() === "true";
+if (!requested) {
+  console.log("migrate: skipped (RUN_MIGRATIONS is not true)");
+  process.exit(0);
+}
+
+const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+if (!url) {
+  console.error("migrate: DATABASE_URL_UNPOOLED or DATABASE_URL must be set");
+  process.exit(1);
+}
+
+const client = new pg.Client({ connectionString: url });
+await client.connect();
+try {
+  await migrate(drizzle(client), { migrationsFolder: "./drizzle" });
+  console.log("migrate: done");
+} finally {
+  await client.end();
+}

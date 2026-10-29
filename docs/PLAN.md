@@ -1,6 +1,6 @@
 # Roundtable Tools: Build Plan
 
-Status: draft v2, October 2026
+Status: v3, October 2026. Phase 0 is built and waiting on hosting setup (see `docs/SETUP.md`).
 
 ## What this is
 
@@ -13,11 +13,18 @@ The code is public. The data is not. Most of the design below follows from that 
 | Topic | Decision |
 | --- | --- |
 | Hosting accounts | The maintainer's personal accounts, not an employer's. Vercel Hobby. |
+| Stack | Neon Postgres and Better Auth (email codes), not Supabase. See "Why Neon". |
 | Users | 2 to 10 people sign in. |
+| District | The roundtable serves one district. Import keeps that district's rows and drops the rest. |
 | Youth | Import adults only. Youth rows are dropped in the browser before anything is saved. Youth can be added by hand when needed. |
+| Positions | Import every adult position. Filter later; some announcements go out broadly. |
 | Contact source | Scouting America's "all registered people" roster export (CSV). There is no import into Scouting America's tools; data only flows out. |
-| Domain | A subdomain of a domain the maintainer already owns, for both the app and the sending address. No purchase needed. |
+| Domain | `rpc.pack662nyc.com` for the app. `mail.pack662nyc.com` verified in Resend for sending, so a future pack app can share it. Move to a dedicated domain if the tools outgrow this. |
 | Email provider | Resend: transactional email for sign-in codes, Broadcasts for roundtable announcements. |
+| Meetings | One session a month. Breakouts are coming but not tracked separately: what matters is whether someone attended the meeting. |
+| Attendance capture | A volunteer checks people in by hand. QR self check-in later. |
+| Data storage | Approved by the district. |
+| Headline metric | What council asks for: the percent of units with at least one representative at a roundtable this scouting year. Goal: 100%. |
 
 ## Goals
 
@@ -82,7 +89,7 @@ Adding a tool means a folder under `app/(hub)/` and one registry entry. Contacts
 - **units**: Scouting America unit ID (unique when present), type (Pack, Troop, Crew, Ship, Post, Club), number, designation, chartered organization, district, active flag. Troops carry B or G for linked boys' and girls' troops ("Troop 101 B"). Packs are F (family) or B. Crews and Ships have none.
 - **contacts**: first, last, and preferred name; primary and alternate email; phone; member ID (unique when present); youth flag; parent or guardian email (youth only); notes; status (active, not in latest roster, archived); source (import, manual, walk-in); timestamps.
 - **affiliations**: links contacts to units with a position (Cubmaster, Committee Chair, and so on). Unit is optional so district positions like Unit Commissioner or Merit Badge Counselor fit the same table. Each carries its registration status and expiry date from the export.
-- **meetings**: date, scouting year, title or topic, format (in person, virtual, hybrid), status (held, cancelled), notes.
+- **meetings**: date, scouting year, title or topic, format (in person, virtual, hybrid), status (held, cancelled), notes. Breakouts are not modeled; attendance is per meeting.
 - **attendance**: meeting, contact, unit represented that night (optional), method (manual, legacy import, pasted list), check-in time. Unique on meeting + contact.
 - **imports**: who ran it, when, file name, counts (rows read, youth dropped, other districts dropped, new, updated, unchanged, needs review).
 - **users, sessions, verifications**: Better Auth tables, plus a role (admin, editor, viewer).
@@ -120,11 +127,12 @@ The export has 90 columns, one row per registration. `tests/fixtures/roster-expo
 **Steps.**
 
 1. Upload the CSV. It is parsed in the browser. The byte-order mark is stripped, and short (truncated) rows are flagged, not guessed at.
-2. **Drop youth.** A row is youth if `IsYouth` is 1. If `IsYouth` is blank, a row with no unit position and no district position is treated as youth. Age alone is not used: Venturers and Sea Scouts can be 18 to 20 and are still youth members.
-3. **Filter by district.** Keep rows whose `DistrictLong` or `aboveUnitDistrictLong` matches the districts set in Settings. The export can cover more than one district, and district names are not formatted consistently ("SAMPLE DISTRICT 30" vs. "Other River District 15"), so matching is on the exact configured strings.
+2. **Harvest units, then drop youth.** Unit records (ID, type, number, designation, chartered org, district) are read from every row first, youth rows included. Unit details are not personal data, and a unit whose only registered members are youth or "Multiple" adults listed elsewhere must still count toward coverage. Then personal data is dropped for youth rows. A row is youth if `IsYouth` is 1. If `IsYouth` is blank, a row with no unit position and no district position is treated as youth. Age alone is not used: Venturers and Sea Scouts can be 18 to 20 and are still youth members.
+3. **Filter by district.** Keep rows whose `DistrictLong` or `aboveUnitDistrictLong` matches the district set in Settings. The export covers more than one district, and district names are not formatted consistently ("SAMPLE DISTRICT 30" vs. "Other River District 15"), so matching is on the exact configured string.
 4. **Normalize.** Trim and fix capitalization. Lowercase emails. Standardize phone numbers. Parse dates in either `MM-DD-YY` or `M/D/YYYY` form (both appear in the same column). Read unit numbers as integers (`UnitName` zero-pads to four digits, `UnitNo` does not).
 5. **Dedupe.**
-   - Inside the file: rows sharing a `MemberID` collapse into one contact with several affiliations. `RegistrationStatusLong = Multiple` marks people registered in more than one place. Their other registrations may be outside this export, so affiliations from earlier imports are kept, not dropped.
+   - Inside the file: rows sharing a `MemberID` collapse into one contact with several affiliations, as a safeguard.
+   - `RegistrationStatusLong = Multiple`: the export lists these people once, with one unit, and only flags that they hold other registrations. Their other units are added by hand on the contact and are never removed by a later import. The contact shows a "registered in more than one place" hint so it's clear the list may be incomplete.
    - Against the database, in order of confidence: member ID; then email plus first name; then a fuzzy name match (legal "James" vs. preferred "Jim", typos) with a shared unit. Only the first two merge automatically. Fuzzy matches go to a review queue. This matters most for walk-ins and the legacy attendance sheets, which have no member IDs.
    - Families often share one email. Same email with a different first name means two people. These are flagged, not merged.
 6. **Preview** before saving: rows read, youth dropped, other districts dropped, new, updated (changed fields shown), unchanged, needs review.
@@ -143,13 +151,23 @@ Import never overwrites hand-entered notes, preferred names set by hand, or hand
 
 ### Legacy import
 
-One-time import of the existing Google Sheets (Name, Unit, a notes column, one column per month marked "Attended"). It creates meetings from the month columns, matches names to contacts with a review step, and parses the notes column into extra units and roles. Run it after the first roster import so names match against real records.
+One-time import of the existing Google Sheets (Name, Unit, a notes column, one column per month marked "Attended"). It creates meetings from the month columns, matches names to contacts with a review step, and parses the notes column into extra units and roles. A month column with no attendance is created as a cancelled meeting (those months had other events), and the importer asks before assuming that. Run it after the first roster import so names match against real records.
 
 ### Metrics, first set
 
+**Headline: unit coverage, the number council asks for.**
+
+> Units with at least one representative at a held roundtable this scouting year ÷ active units in the district. Goal: 100%.
+
+- *Active units* come from the latest roster import, read from every row, so units with only youth members still count. Linked troops (B and G) are separate units with separate unit IDs, so each counts on its own.
+- *Represented*: if the check-in names the unit the person came for, that unit counts. Otherwise every unit the attendee is affiliated with counts, including units added by hand for "Multiple" registrations.
+- Shown as a progress bar toward 100%, with the number of units still to reach.
+
+Supporting metrics:
+
+- **Units not represented** this year, with one-click copy of their leaders' emails. This is the outreach list that moves the headline number.
+- Coverage per meeting, and cumulative coverage across the year.
 - Headcount per meeting, next to the same month last year.
-- Units represented per meeting, and unit coverage: percent of the district's active units with at least one attendee this year. The roster export lists every unit with registered members, so we have the full set.
-- **Units not represented** this year, with one-click copy of their leaders' emails. This is the outreach list.
 - New vs. returning attendees, and year-over-year retention.
 - Mix by program: Packs, Troops, Crews, Ships.
 - Per person: meetings attended this year, last attended, current streak.
@@ -185,16 +203,18 @@ The repo is public, so the code assumes anyone can read it.
 
 ## Domain and DNS
 
-- App: `roundtable.<maintainer domain>` (name to be confirmed), as a CNAME to Vercel.
-- Email: the same subdomain is verified in Resend. Resend's records sit on sub-names (`send.` and `resend._domainkey.`), so they do not collide with the app's CNAME, and the parent domain's own mail is unaffected.
-- Sender: "Roundtable" display name, a `no-reply` address for sign-in codes, and a monitored reply-to for announcements.
-- If the tool moves to a district-owned domain later, it is a DNS change and a Resend re-verify, about an hour.
+DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
+
+- App: `rpc.pack662nyc.com`, a CNAME to Vercel.
+- Email: `mail.pack662nyc.com` is verified in Resend. Its records sit on sub-names of `mail.`, so the pack site and the pack's existing email are unaffected.
+- Sender: "Roundtable Tools" display name, `no-reply@mail.pack662nyc.com` for sign-in codes, and a monitored reply-to for announcements.
+- If the tools move to a dedicated domain later, it is a DNS change and a Resend re-verify, about an hour.
 
 ## Delivery phases
 
 | Phase | Scope | Size | Main risk |
 | --- | --- | --- | --- |
-| 0. Foundation | Vercel project, Neon, custom subdomain, Resend domain, Better Auth OTP, users and roles, hub shell, CI | M | DNS and email deliverability |
+| 0. Foundation (built) | Vercel project, Neon, custom subdomain, Resend domain, Better Auth OTP, users and roles, hub shell, CI | M | DNS and email deliverability |
 | 1. Contacts | Units, contacts, affiliations; filters; copy emails; manual youth with parent email; CSV and XLSX export | M | Low |
 | 2. Import | Roster parser, youth and district filters, dedupe, review queue, preview, save, log | L | Fuzzy match quality |
 | 3. Attendance | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
@@ -203,17 +223,23 @@ The repo is public, so the code assumes anyone can read it.
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
 
+## Phase 0: what was built
+
+- Next.js 16 app with Cache Components; session reads stream inside `<Suspense>`.
+- Sign-in by 6-digit email code (Better Auth email OTP). Sign-up disabled; unknown emails get the same response and no email. Codes stored hashed, 10-minute expiry, 3 tries per code, rate-limited sends.
+- First admin claimed through `BOOTSTRAP_ADMIN_EMAILS`, only while no admin exists.
+- Users page for admins: add, change role, remove. The last admin can't be demoted or removed. Every change is written to `audit_log`.
+- Hub home built from the tool registry, filtered by role.
+- `proxy.ts` sends visitors without a session cookie to `/login`; every page and action re-checks the session on the server.
+- Drizzle schema and migrations; production applies them during the build.
+- CI on every PR: lint, typecheck, unit tests, build.
+
+Verified locally against Postgres 16 with a browser test: unknown email gets no code; bootstrap admin signs in; add, duplicate, role change, and last-admin guard; sign-out; viewer can't see or open admin pages; the auth API refuses a self-assigned role; wrong codes lock out; code requests are rate-limited.
+
 ## Open questions
 
-1. Confirm Neon + Better Auth in place of Supabase.
-2. Which Vercel account hosts the project, and the exact subdomain name. Where is the parent domain's DNS hosted?
-3. Which district or districts does this roundtable serve? The export can include more than one.
-4. In a full export, does someone with "Multiple" registrations appear on several rows with the same Member ID, or on one row?
-5. Should any adult positions be skipped at import (for example Merit Badge Counselor only, Unit Scouter Reserve, Registration Inquiry), or import every adult and filter later?
-6. Is roundtable one session a month, or are Cub Scout and Scouts BSA breakouts tracked separately? Were the months with no attendance cancelled?
-7. Who records attendance at the door, and on what device?
-8. Has the district or council signed off on storing member contact data in a tool outside Scouting America's systems?
-9. What attendance numbers get reported up to the district or council, so the metrics match?
+1. Reply-to address for announcements (Phase 5).
+2. Scouting year start month (a setting; defaults to September).
 
 ## Later ideas
 
