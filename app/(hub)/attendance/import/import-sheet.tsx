@@ -71,7 +71,7 @@ export function ImportSheet({ data, today }: { data: LegacyMatchData; today: str
     );
     setRows(
       parsed.people.map((p, i) => {
-        const result = matchPerson({ name: p.name, unitHint: p.unitText }, data.people);
+        const result = matchPerson({ name: p.name, unitHint: [p.unitText, p.otherUnitText].filter(Boolean).join("; ") }, data.people);
         const came = `came to ${plural(p.attended.length, "meeting")}`;
         return {
           key: String(i),
@@ -114,6 +114,7 @@ export function ImportSheet({ data, today }: { data: LegacyMatchData; today: str
         const d = row.decision;
         if (d.kind === "skip" || d.kind === "undecided") return [];
         const units = resolveUnitMentions(p.unitText, data.units);
+        const extra = resolveUnitMentions(p.otherUnitText, data.units);
         const notes = [
           ...p.notes,
           units.unresolved.length ? `Unit on the old sheet: ${p.unitText}` : null,
@@ -124,6 +125,7 @@ export function ImportSheet({ data, today }: { data: LegacyMatchData; today: str
             name: p.name,
             contact: d.kind === "existing" ? { kind: "existing", id: d.id } : { kind: "new", ...splitName(p.name), notes: notes.join("; ") },
             unitIds: units.unitIds,
+            extraUnitIds: extra.unitIds.filter((u) => !units.unitIds.includes(u)),
             attended: p.attended,
           },
         ];

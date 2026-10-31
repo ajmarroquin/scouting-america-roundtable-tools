@@ -28,6 +28,14 @@ export const TOOLS: Tool[] = [
     status: "live",
   },
   {
+    slug: "units",
+    name: "Units",
+    description: "Every unit in the district, who's connected to it, and how often it shows up at roundtable.",
+    href: "/units",
+    minRole: "viewer",
+    status: "live",
+  },
+  {
     slug: "users",
     name: "Users",
     description: "Who can sign in and what they can do.",

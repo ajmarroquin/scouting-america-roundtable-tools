@@ -50,6 +50,14 @@ describe("resolveUnitMentions", () => {
     expect(resolveUnitMentions("205", units)).toEqual({ unitIds: ["c205"], unresolved: [] });
   });
 
+  it("follows a troop that's a family troop now", () => {
+    const now = [...units, { id: "t414", type: "Troop", number: 414, genderAccepted: "F" }];
+    expect(resolveUnitMentions("Troop 414 G", now)).toEqual({ unitIds: ["t414"], unresolved: [] });
+    // A boys troop isn't the girls troop with the same number.
+    const onlyGirls = units.filter((u) => u.id !== "t101b");
+    expect(resolveUnitMentions("Troop 101 B", onlyGirls)).toEqual({ unitIds: [], unresolved: ["Troop 101 B"] });
+  });
+
   it("leaves ambiguous or unknown units for a person to sort out", () => {
     expect(resolveUnitMentions("Troop 101", units)).toEqual({ unitIds: [], unresolved: ["Troop 101"] });
     expect(resolveUnitMentions("101", units).unresolved).toEqual(["101 (Pack 101 or Troop 101 B or Troop 101 G)"]);

@@ -218,7 +218,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 1. Contacts (built) | Units, contacts, affiliations; filters; copy emails; manual youth with parent email; CSV and XLSX export | M | Low |
 | 2. Import (built) | Roster parser, youth and district filters, dedupe, preview, save, log. Fuzzy review queue moves to Phase 3, where walk-ins and the legacy sheets need it. | L | Fuzzy match quality |
 | 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
-| 4. Metrics | Dashboard, outreach list, metrics export | S to M | Low once units are imported |
+| 4. Metrics (units tool built; coverage next) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
@@ -263,6 +263,18 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
   - Loading the same sheet twice adds nothing: meetings are found by date, and check-ins are one per person per meeting.
 - **Paste a list** (meeting page, editors): one name per line, a Zoom participant report (using the original name when someone renamed themselves), or cells from a sign-in sheet. After review, everyone is checked in with method "pasted list". A full name that matches nobody defaults to a new contact; a single word, like a device name, defaults to skip.
 - **Fixed**: the format badge on the meeting page was blank, because the page read the labels from a client-only file.
+
+## Phase 4, part 1: what was built
+
+- **Unit list** (`/units/load`, admins): Scouting America's Unit Membership Totals report (OLR Membership Status Summary) as CSV. It has unit names and current youth and adult counts, no people and no unit IDs, so units are matched by type, number, and designation.
+  - A unit on the list with at least one member counts toward coverage. Before any list is loaded, coverage counts the roster's active units.
+  - A troop that changed designation (girls to family) is updated, not duplicated. New units are added. Units listed with no members are left out.
+  - The preview shows what will change before anything is saved.
+- **Units** (`/units`, a tool on the home page): every unit with sub-district, members from the list, contacts in the app, and how many of the year's roundtables it was represented at.
+  - Units not on the council's unit list are flagged: usually a walk-in's unit typed by hand, or a unit that folded.
+  - Editors can add a unit by hand. Troops can now be family (F) as well as boys or girls.
+- **Unit page** (`/units/[id]`): meetings this year and who came for the unit, how often each person came, and the adults in the app with their positions. A scouting-year picker covers past years.
+- **Old sheets**: units written in other columns ("troop 662B, troop 662g, pack 662") become positions for new people and help matching. "Troop 414 G" finds Troop 414 when it's a family troop now.
 
 ## Open questions
 
