@@ -10,13 +10,20 @@ import { sendEmail } from "@/lib/email/send";
 import { appUrl, welcomeEmail } from "@/lib/email/welcome";
 import { user } from "@/lib/db/schema";
 
-export type UserRow = { id: string; name: string; email: string; role: Role; createdAt: Date };
+export type UserRow = { id: string; name: string; email: string; role: Role; createdAt: Date; lastSignInAt: Date | null };
 
 export type Result = { ok: boolean; message: string };
 
 export async function listUsers(): Promise<UserRow[]> {
   const rows = await db
-    .select({ id: user.id, name: user.name, email: user.email, role: user.role, createdAt: user.createdAt })
+    .select({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+      lastSignInAt: user.lastSignInAt,
+    })
     .from(user)
     .orderBy(asc(user.email));
   return rows.map((r) => ({ ...r, role: isRole(r.role) ? r.role : "viewer" }));

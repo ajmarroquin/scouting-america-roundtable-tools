@@ -10,6 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { appTimeZone } from "@/lib/attendance/queries";
+import { lastSignInLabel, signInTimestamp } from "@/lib/auth/last-sign-in";
 import { hasRole, ROLE_DESCRIPTIONS, ROLE_LABELS, ROLES } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { listUsers } from "@/lib/users";
@@ -40,6 +42,13 @@ async function UsersPanel() {
     return <p className="text-sm text-muted-foreground">Only admins can manage users.</p>;
   }
   const users = await listUsers();
+  const timeZone = appTimeZone();
+  const now = new Date();
+  const signedIn = (at: Date | null) => (
+    <span className={at ? "" : "text-muted-foreground"} title={at ? signInTimestamp(at, timeZone) : "Hasn't signed in yet"}>
+      {lastSignInLabel(at, timeZone, now)}
+    </span>
+  );
 
   return (
     <>
@@ -67,6 +76,7 @@ async function UsersPanel() {
           <TableRow>
             <TableHead>Email</TableHead>
             <TableHead className="hidden sm:table-cell">Name</TableHead>
+            <TableHead className="hidden sm:table-cell">Last sign-in</TableHead>
             <TableHead>Role</TableHead>
             <TableHead className="text-right">
               <span className="sr-only">Actions</span>
@@ -85,11 +95,13 @@ async function UsersPanel() {
                 )}
                 <div className="sm:hidden">
                   <UserName key={u.name} userId={u.id} name={u.name} />
+                  <div className="text-xs text-muted-foreground">Last sign-in: {signedIn(u.lastSignInAt)}</div>
                 </div>
               </TableCell>
               <TableCell className="hidden sm:table-cell">
                 <UserName key={u.name} userId={u.id} name={u.name} />
               </TableCell>
+              <TableCell className="hidden whitespace-nowrap sm:table-cell">{signedIn(u.lastSignInAt)}</TableCell>
               <TableCell>
                 <RoleSelect userId={u.id} role={u.role} />
               </TableCell>

@@ -5,6 +5,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { emailOTP } from "better-auth/plugins/email-otp";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { account, rateLimit, session, user, verification } from "@/lib/db/schema";
 import { emailFailureReason } from "@/lib/email/errors";
@@ -42,6 +43,21 @@ export const auth = betterAuth({
   advanced: {
     ipAddress: { ipAddressHeaders: ["x-vercel-forwarded-for", "x-forwarded-for"] },
     backgroundTasks: { handler: waitUntil },
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        // A session is only created at sign-in, so this is the last time they signed in.
+        async after(created) {
+          try {
+            await db.update(user).set({ lastSignInAt: new Date() }).where(eq(user.id, created.userId));
+          } catch (error) {
+            // Never block a sign-in over this.
+            console.error("[auth] couldn't record the sign-in time", error);
+          }
+        },
+      },
+    },
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
