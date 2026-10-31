@@ -20,6 +20,8 @@ export function welcomeEmail(opts: { inviterName: string; role: Role; appUrl: st
     roleLine,
     "",
     `To sign in, go to ${appUrl} and enter ${email}. We'll email you a 6-digit code. There's no password.`,
+    "",
+    `Questions? Reply to this email to reach ${inviterName}.`,
   ].join("\n");
 
   const html = `<!doctype html>
@@ -28,6 +30,7 @@ export function welcomeEmail(opts: { inviterName: string; role: Role; appUrl: st
     <p>${escapeHtml(inviterName)} added you to Roundtable Tools, the roundtable team's contacts and attendance app.</p>
     <p>${escapeHtml(roleLine)}</p>
     <p>To sign in, go to <a href="${escapeHtml(appUrl)}">${escapeHtml(appUrl)}</a> and enter ${escapeHtml(email)}. We'll email you a 6-digit code. There's no password.</p>
+    <p>Questions? Reply to this email to reach ${escapeHtml(inviterName)}.</p>
   </body>
 </html>`;
 

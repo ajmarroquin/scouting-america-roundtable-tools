@@ -72,7 +72,12 @@ export async function addUser(
 async function deliverWelcome(actor: CurrentUser, email: string, role: Role): Promise<string | null> {
   try {
     const url = appUrl(process.env);
-    await sendEmail({ to: email, ...welcomeEmail({ inviterName: actor.name || actor.email, role, appUrl: url, email }) });
+    await sendEmail({
+      to: email,
+      // Replies go to the admin who added them, not the no-reply sender.
+      replyTo: actor.email,
+      ...welcomeEmail({ inviterName: actor.name || actor.email, role, appUrl: url, email }),
+    });
     return null;
   } catch (error) {
     const reason = emailFailureReason(error);
