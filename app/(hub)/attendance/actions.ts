@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Role } from "@/lib/auth/roles";
 import { NotAllowedError, requireRole, requireUser } from "@/lib/auth/session";
 import type { ExportAttendance, ExportMeeting } from "@/lib/attendance/export";
+import { importLegacySheet, type LegacyImportInput, type LegacyImportResult } from "@/lib/attendance/legacy-import";
 import * as att from "@/lib/attendance/mutations";
 import { attendanceForExport } from "@/lib/attendance/queries";
 import { yearRange } from "@/lib/attendance/year";
@@ -61,6 +62,16 @@ export async function setRepresentedUnitAction(attendanceId: string, unitId: str
 export async function addWalkInAction(meetingId: string, input: Omit<NewContactInput, "source">): Promise<Result> {
   if (!id.safeParse(meetingId).success) return bad("meeting");
   return withRole("editor", (actor) => att.addWalkIn(actor, meetingId, input));
+}
+
+export async function bulkCheckInAction(meetingId: string, items: att.BulkCheckInItem[]): Promise<Result> {
+  if (!id.safeParse(meetingId).success) return bad("meeting");
+  return withRole("editor", (actor) => att.bulkCheckIn(actor, meetingId, items));
+}
+
+/** Admins only: loads a reviewed old attendance sheet. */
+export async function importLegacyAction(input: LegacyImportInput): Promise<LegacyImportResult> {
+  return withRole("admin", (actor) => importLegacySheet(actor, input));
 }
 
 type ExportResult = { ok: true; meetings: ExportMeeting[]; rows: ExportAttendance[] } | { ok: false; message: string };
