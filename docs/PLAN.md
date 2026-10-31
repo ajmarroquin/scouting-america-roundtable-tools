@@ -218,7 +218,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 1. Contacts (built) | Units, contacts, affiliations; filters; copy emails; manual youth with parent email; CSV and XLSX export | M | Low |
 | 2. Import (built) | Roster parser, youth and district filters, dedupe, preview, save, log. Fuzzy review queue moves to Phase 3, where walk-ins and the legacy sheets need it. | L | Fuzzy match quality |
 | 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
-| 4. Metrics (units tool built; coverage next) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
+| 4. Metrics (units tool and coverage built; trends next) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
@@ -275,6 +275,16 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
   - Editors can add a unit by hand. Troops can now be family (F) as well as boys or girls.
 - **Unit page** (`/units/[id]`): meetings this year and who came for the unit, how often each person came, and the adults in the app with their positions. A scouting-year picker covers past years.
 - **Old sheets**: units written in other columns ("troop 662B, troop 662g, pack 662") become positions for new people and help matching. "Troop 414 G" finds Troop 414 when it's a family troop now.
+
+## Phase 4, part 2: what was built
+
+- **Coverage math** (`lib/attendance/coverage-math.ts`, pure and tested): for each held meeting in a scouting year, the counted units represented, units here for the first time that year, the year's running total, headcount, first-time attendees, and units represented that aren't on the unit list.
+- **Meeting page**: four numbers for every held meeting: units at this roundtable (of the counted units), the year so far toward 100%, units here for the first time this year, and people (with first-timers). Units represented that aren't on the council's unit list are called out with a link to Units.
+- **Council report** (`/report`, a tool on the home page): coverage for a scouting year as a percentage and progress bar, with what it's measured against (the unit list's date, or the roster before any list).
+  - **Units still to reach**, with each unit's top leader, committee chair, and chartered org rep from contacts, and one button to copy their emails. Units with no such contact are marked.
+  - **By roundtable**: people, units, and the running total with percentages, and the units new at each one.
+  - **By unit**: roundtables attended and the last one, including units not on the list.
+  - **Export**: one Excel workbook (Summary, By roundtable, By unit, Still to reach) or CSVs.
 
 ## Open questions
 
