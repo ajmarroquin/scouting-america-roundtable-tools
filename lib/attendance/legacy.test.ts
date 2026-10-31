@@ -58,7 +58,20 @@ describe("parseLegacySheet", () => {
     ]);
     expect(sheet.skippedRows).toBe(1);
     const pat = sheet.people.find((p) => p.name === "Pat Testcase")!;
-    expect(pat).toMatchObject({ row: 5, unitText: "pack 101", notes: ["Position: Committee Chair"] });
+    expect(pat).toMatchObject({ row: 5, unitText: "pack 101", notes: ["Position: Committee Chair"], otherUnitText: "" });
+  });
+
+  it("picks out extra units from other columns, and leaves roles as notes", () => {
+    const s = parseLegacySheet(
+      [
+        ["Name", "Unit", "Column 11", "Nov 25"],
+        ["Alex Example", "Troop 101 B", "pack 101, troop 101 g", "x"],
+        ["Casey Commish", "", "unit commissioner", "x"],
+      ],
+      "2026-10-31",
+    ) as LegacySheet;
+    expect(s.people[0]).toMatchObject({ otherUnitText: "pack 101, troop 101 g", notes: ["Column 11: pack 101, troop 101 g"] });
+    expect(s.people[1]).toMatchObject({ otherUnitText: "", notes: ["Column 11: unit commissioner"] });
   });
 
   it("merges a name that appears twice", () => {

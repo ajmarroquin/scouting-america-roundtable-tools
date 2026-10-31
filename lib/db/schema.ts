@@ -147,6 +147,12 @@ export const unit = pgTable(
     // False once a later import no longer lists the unit.
     active: boolean("active").notNull().default(true),
     lastImportId: uuid("last_import_id").references(() => importRun.id, { onDelete: "set null" }),
+    // From the latest unit list (Unit Membership Totals report). When a list has
+    // been loaded, the units on it with members are the ones coverage counts.
+    listedOn: date("listed_on", { mode: "string" }),
+    youthCount: integer("youth_count"),
+    adultCount: integer("adult_count"),
+    subdistrict: text("subdistrict"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

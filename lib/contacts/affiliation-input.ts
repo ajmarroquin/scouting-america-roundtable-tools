@@ -5,11 +5,12 @@ import { z } from "zod";
 
 export const NEW_UNIT_TYPES = ["Pack", "Troop", "Crew", "Ship", "Post", "Club"] as const;
 
-/** Troops are boys or girls; packs are family or boys. Other units have no designation. */
+/** Troops are boys, girls, or family; packs are family or boys. Other units have no designation. */
 export const DESIGNATIONS: Record<string, { value: "B" | "G" | "F"; label: string }[]> = {
   Troop: [
     { value: "B", label: "Boys (B)" },
     { value: "G", label: "Girls (G)" },
+    { value: "F", label: "Family (F)" },
   ],
   Pack: [
     { value: "F", label: "Family" },
@@ -28,7 +29,7 @@ export const unitRefSchema = z.discriminatedUnion("kind", [
       genderAccepted: z.enum(["B", "G", "F"]).nullable(),
     })
     .refine((u) => !DESIGNATIONS[u.type] || u.genderAccepted, {
-      message: "Pick boys or girls for a troop, or family or boys for a pack",
+      message: "Pick a designation: boys, girls, or family for a troop; family or boys for a pack",
     })
     .refine((u) => DESIGNATIONS[u.type] || !u.genderAccepted, { message: "Only troops and packs take a designation" }),
 ]);

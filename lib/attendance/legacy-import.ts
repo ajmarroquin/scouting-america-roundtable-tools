@@ -39,6 +39,8 @@ export const legacyImportSchema = z.object({
         ]),
         /** Units the sheet's unit column names without doubt. */
         unitIds: z.array(id).max(10),
+        /** More units named in other columns: positions for a new person, not the unit they represented. */
+        extraUnitIds: z.array(id).max(10).default([]),
         /** Keys of the meetings this person attended. */
         attended: z.array(z.number().int().min(0)).max(60),
       }),
@@ -105,7 +107,7 @@ export async function importLegacySheet(actor: CurrentUser, raw: LegacyImportInp
     }
 
     // Units the sheet named, limited to ones that still exist.
-    const namedUnitIds = [...new Set(input.people.flatMap((p) => p.unitIds))];
+    const namedUnitIds = [...new Set(input.people.flatMap((p) => [...p.unitIds, ...p.extraUnitIds]))];
     const liveUnits = new Set(
       namedUnitIds.length
         ? (await tx.select({ id: unit.id }).from(unit).where(inArray(unit.id, namedUnitIds))).map((u) => u.id)
@@ -136,7 +138,7 @@ export async function importLegacySheet(actor: CurrentUser, raw: LegacyImportInp
         contactId = row.id;
         created.set(key, contactId);
         contactsAdded++;
-        const units = p.unitIds.filter((u) => liveUnits.has(u));
+        const units = [...new Set([...p.unitIds, ...p.extraUnitIds])].filter((u) => liveUnits.has(u));
         if (units.length) {
           await tx
             .insert(affiliation)

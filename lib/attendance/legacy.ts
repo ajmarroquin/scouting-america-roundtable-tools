@@ -1,3 +1,5 @@
+import { parseUnitMentions } from "./unit-mentions";
+
 // Reads an old attendance sheet: one row per person, a Name column, maybe a Unit
 // column, and one column per meeting headed by a month ("Nov 25", "June 26") or
 // a date ("11/19/2025"). Any mark in a meeting column counts as attended.
@@ -22,6 +24,8 @@ export type SheetPerson = {
   unitText: string;
   /** Other filled-in columns, as "Header: value". */
   notes: string[];
+  /** Units named in those other columns ("troop 662B, pack 662"), for a new contact's positions. */
+  otherUnitText: string;
   /** Columns of the meetings they attended. */
   attended: number[];
 };
@@ -120,10 +124,13 @@ export function parseLegacySheet(rows: string[][], today: string): LegacySheet |
       return;
     }
     const attended = meetingCols.filter((m) => attendedMark(r[m.column])).map((m) => m.column);
-    const notes = noteCols
-      .map((c) => [c.header, clean(r[c.column])] as const)
-      .filter(([, v]) => v !== "")
-      .map(([h, v]) => (h ? `${h}: ${v}` : v));
+    const filled = noteCols.map((c) => [c.header, clean(r[c.column])] as const).filter(([, v]) => v !== "");
+    const notes = filled.map(([h, v]) => (h ? `${h}: ${v}` : v));
+    // A note like "pack 777, troop 777" lists more units; "unit commissioner" doesn't.
+    const otherUnitText = filled
+      .map(([, v]) => v)
+      .filter((v) => parseUnitMentions(v).some((m) => m.type))
+      .join("; ");
     const key = name.toLowerCase();
     const existing = byName.get(key);
     if (existing) {
@@ -131,9 +138,17 @@ export function parseLegacySheet(rows: string[][], today: string): LegacySheet |
       existing.attended = [...new Set([...existing.attended, ...attended])].sort((a, b) => a - b);
       existing.notes = [...new Set([...existing.notes, ...notes])];
       existing.unitText ||= unitCol >= 0 ? clean(r[unitCol]) : "";
+      existing.otherUnitText = [existing.otherUnitText, otherUnitText].filter(Boolean).join("; ");
       return;
     }
-    byName.set(key, { row: headerAt + i + 2, name, unitText: unitCol >= 0 ? clean(r[unitCol]) : "", notes, attended });
+    byName.set(key, {
+      row: headerAt + i + 2,
+      name,
+      unitText: unitCol >= 0 ? clean(r[unitCol]) : "",
+      notes,
+      otherUnitText,
+      attended,
+    });
   });
 
   const people = [...byName.values()];

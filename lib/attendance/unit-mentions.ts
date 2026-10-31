@@ -73,12 +73,12 @@ export function resolveUnitMentions(text: string | null | undefined, units: Know
   const unitIds: string[] = [];
   const unresolved: string[] = [];
   for (const m of parseUnitMentions(text)) {
-    const hits = units.filter(
-      (u) =>
-        u.number === m.number &&
-        (m.type === null || u.type === m.type) &&
-        (m.gender === null || u.genderAccepted === m.gender),
-    );
+    const sameNumber = units.filter((u) => u.number === m.number && (m.type === null || u.type === m.type));
+    let hits = sameNumber.filter((u) => m.gender === null || u.genderAccepted === m.gender);
+    // "Troop 414 G" on an old sheet, and the troop is a family troop now: one unit, so it's that one.
+    if (!hits.length && m.gender && sameNumber.length === 1 && (sameNumber[0].genderAccepted ?? "F") === "F") {
+      hits = sameNumber;
+    }
     if (hits.length === 1) {
       if (!unitIds.includes(hits[0].id)) unitIds.push(hits[0].id);
     } else {

@@ -342,4 +342,49 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(again).toMatchObject({ ok: true, message: "Checked in 0 people, 2 were already in." });
     expect(await db.$count(schema.contact, eq(schema.contact.lastName, "Zoomer"))).toBe(1);
   });
+
+  it("loads a unit list: matches, follows a designation change, adds new units, and counts only listed units", async () => {
+    const { parseUnitList } = await import("@/lib/units/unit-list");
+    const units = await import("@/lib/units/apply");
+    const { addUnit } = await import("@/lib/units/mutations");
+    const queries = await import("@/lib/units/queries");
+    const list = parseUnitList(readFileSync(path.join(import.meta.dirname, "../../tests/fixtures/unit-list-sample.csv"), "utf8"));
+    if ("error" in list) throw new Error(list.error);
+
+    // Before any list: coverage counts the roster's active units.
+    expect((await units.countedUnitIds()).source).toBe("roster");
+
+    // A troop typed in by hand as girls, which the list now has as a family troop.
+    const t707 = await addUnit(actor, { type: "Troop", number: "707", genderAccepted: "G" });
+    expect(t707.ok).toBe(true);
+    expect(await addUnit(actor, { type: "Troop", number: "707", genderAccepted: "G" })).toMatchObject({ ok: false, id: t707.id });
+
+    const payload = { fileName: "units.csv", asOf: list.asOf, district: DISTRICT, units: list.units };
+    const preview = await units.previewUnitList(payload);
+    expect(preview).toMatchObject({ ok: true, counts: { matched: 4, changed: 1, created: 1, skipped: 1, counted: 6 } });
+    const loaded = await units.loadUnitList(actor, payload);
+    expect(loaded).toMatchObject({ ok: true, counts: { counted: 6 } });
+
+    const counted = await units.countedUnitIds();
+    expect(counted).toMatchObject({ source: "list", asOf: "2026-10-31" });
+    expect(counted.ids).toHaveLength(6);
+    const [troop707] = await db.select().from(schema.unit).where(eq(schema.unit.id, t707.id!));
+    expect(troop707).toMatchObject({ genderAccepted: "F", youthCount: 9, adultCount: 4, subdistrict: "Sub Dist. #2" });
+
+    // Ship 303 came from the roster but isn't on the list: flagged, and not counted.
+    const overview = await queries.listUnitsOverview({ start: "2025-09-01", end: "2026-08-31" });
+    const ship = overview.units.find((u) => u.label === "Ship 303")!;
+    expect(ship).toMatchObject({ onList: false, counted: false });
+    expect(overview.units.find((u) => u.label === "Pack 404")).toMatchObject({ onList: true, counted: true, handAdded: true, contacts: 0 });
+    // Pat came to five 2025-26 meetings for Pack 101 (from the old sheet).
+    const pack = overview.units.find((u) => u.label === "Pack 101")!;
+    expect(pack).toMatchObject({ onList: true, counted: true, meetings: 5, lastRepresented: "2026-05-01" });
+
+    const detail = await queries.getUnitDetail(pack.id, { start: "2025-09-01", end: "2026-08-31" });
+    // Alex goes by Lex, set by hand in an earlier test.
+    expect(detail!.contacts.map((c) => c.name).sort()).toEqual(["Lex Example", "Pat Testcase", "Sam Testcase"]);
+    expect(detail!.people.find((p) => p.name === "Pat Testcase")).toMatchObject({ meetings: 5, last: "2026-05-01" });
+    // Alex's check-ins named Troop 101 B, so they don't count for Pack 101.
+    expect(detail!.people.map((p) => p.name)).not.toContain("Lex Example");
+  });
 });
