@@ -136,6 +136,24 @@ describe("planImport", () => {
         unit("5", { district: "Elsewhere" }),
       ],
     );
-    expect(plan.units).toEqual({ new: 1, updated: 1, deactivated: ["4"], reactivated: 1 });
+    expect(plan.units).toEqual({ new: 1, updated: 1, deactivated: ["4"], reactivated: 1, linked: [] });
+  });
+
+  it("links a unit added by hand to the roster's unit instead of duplicating it", () => {
+    const plan = planImport(
+      {
+        district: D,
+        people: [],
+        units: [{ bsaUnitId: "900101", type: "Troop", number: 101, genderAccepted: "B", charteredOrg: null, district: D }],
+      },
+      [],
+      [
+        unit("x", { id: "manual-b", bsaUnitId: null, genderAccepted: "B" }),
+        unit("y", { id: "manual-g", bsaUnitId: null, genderAccepted: "G" }),
+      ],
+    );
+    expect(plan.units.linked).toEqual([{ unitId: "manual-b", bsaUnitId: "900101" }]);
+    expect(plan.units.new).toBe(0);
+    expect(plan.units.deactivated).toEqual([]);
   });
 });

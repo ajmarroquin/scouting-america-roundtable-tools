@@ -9,8 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/lib/contacts/format";
-import { getContact, listUnits } from "@/lib/contacts/queries";
-import { AffiliationList, ArchiveButton, ContactEditor } from "./contact-editor";
+import { getContact, listUnits, positionsInUse } from "@/lib/contacts/queries";
+import { AffiliationList, ArchiveButton, ContactEditor, DeleteContactButton } from "./contact-editor";
 
 export const metadata: Metadata = { title: "Contact" };
 
@@ -40,7 +40,7 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
   const { id } = await params;
   const user = await requireUser();
   if (!z.uuid().safeParse(id).success) notFound();
-  const [c, units] = await Promise.all([getContact(id), listUnits()]);
+  const [c, units, rosterTitles] = await Promise.all([getContact(id), listUnits(), positionsInUse()]);
   if (!c) notFound();
   const canEdit = hasRole(user.role, "editor");
   const fromRoster = c.source === "import";
@@ -57,7 +57,12 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
             {c.multipleRegistrations && <Badge variant="outline">Multiple registrations</Badge>}
           </div>
         </div>
-        {canEdit && <ArchiveButton contactId={c.id} archived={c.status === "archived"} />}
+        {canEdit && (
+          <div className="flex flex-wrap items-center gap-2">
+            <ArchiveButton contactId={c.id} archived={c.status === "archived"} />
+            {!fromRoster && <DeleteContactButton contactId={c.id} name={c.name} />}
+          </div>
+        )}
       </div>
 
       <Card>
@@ -114,6 +119,8 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
         units={units.filter((u) => u.active)}
         canEdit={canEdit}
         multiple={c.multipleRegistrations}
+        youth={c.isYouth}
+        fromRoster={rosterTitles}
       />
     </>
   );

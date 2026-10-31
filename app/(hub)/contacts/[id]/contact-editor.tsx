@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -7,21 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { AffiliationView, UnitOption } from "@/lib/contacts/queries";
 import {
   addAffiliationAction,
+  deleteContactAction,
   removeAffiliationAction,
   setArchivedAction,
   updateContactAction,
 } from "../actions";
+import { AffiliationPicker, EMPTY_PICK, type Pick, pickToInput } from "../affiliation-picker";
 
 type Result = { ok: boolean; message: string };
 
@@ -138,7 +134,40 @@ export function ArchiveButton({ contactId, archived }: { contactId: string; arch
   );
 }
 
-const DISTRICT = "district";
+export function DeleteContactButton({ contactId, name }: { contactId: string; name: string }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [pending, start] = useTransition();
+  if (!confirming) {
+    return (
+      <Button variant="ghost" size="sm" onClick={() => setConfirming(true)}>
+        Delete
+      </Button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="destructive"
+        size="sm"
+        disabled={pending}
+        aria-label={`Confirm deleting ${name}`}
+        onClick={() =>
+          start(async () => {
+            const result = await deleteContactAction(contactId);
+            report(result);
+            if (result.ok) router.push("/contacts");
+          })
+        }
+      >
+        {pending ? "Deleting…" : "Delete for good"}
+      </Button>
+      <Button variant="ghost" size="sm" disabled={pending} onClick={() => setConfirming(false)}>
+        Cancel
+      </Button>
+    </div>
+  );
+}
 
 export function AffiliationList({
   contactId,
@@ -146,16 +175,20 @@ export function AffiliationList({
   units,
   canEdit,
   multiple,
+  youth,
+  fromRoster,
 }: {
   contactId: string;
   affiliations: AffiliationView[];
   units: UnitOption[];
   canEdit: boolean;
   multiple: boolean;
+  youth: boolean;
+  fromRoster: string[];
 }) {
-  const [unitId, setUnitId] = useState<string>("");
-  const [position, setPosition] = useState("");
+  const [pick, setPick] = useState<Pick>(EMPTY_PICK);
   const [pending, start] = useTransition();
+  const input = pickToInput(pick);
 
   return (
     <Card>
@@ -197,46 +230,26 @@ export function AffiliationList({
 
         {canEdit && (
           <form
-            className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+            className="flex flex-col gap-3 rounded-lg border p-3"
             onSubmit={(e) => {
               e.preventDefault();
+              if (!input) return;
               start(async () => {
-                const result = await addAffiliationAction(contactId, {
-                  unitId: unitId === DISTRICT ? null : unitId,
-                  position,
-                });
+                const result = await addAffiliationAction(contactId, input);
                 report(result);
-                if (result.ok) setPosition("");
+                if (result.ok) setPick(EMPTY_PICK);
               });
             }}
           >
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="add-unit">Unit</Label>
-              <Select value={unitId} onValueChange={setUnitId} required>
-                <SelectTrigger id="add-unit" className="w-full">
-                  <SelectValue placeholder="Pick a unit" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={DISTRICT}>District position (no unit)</SelectItem>
-                  {units.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="add-position">Position</Label>
-              <Input
-                id="add-position"
-                required
-                placeholder="For example, Committee Member"
-                value={position}
-                onChange={(e) => setPosition(e.target.value)}
-              />
-            </div>
-            <Button type="submit" variant="outline" disabled={pending || !unitId}>
+            <AffiliationPicker
+              idPrefix="add"
+              value={pick}
+              onChange={setPick}
+              units={units}
+              youth={youth}
+              fromRoster={fromRoster}
+            />
+            <Button type="submit" variant="outline" className="w-fit" disabled={pending || !input?.position}>
               Add position
             </Button>
           </form>

@@ -251,6 +251,8 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
 
 ## Later ideas
 
+- Contact change history: who changed what, with old and new values, shown on the contact page. Today `audit_log` records who, when, and which fields, but not the values.
+
 - QR self check-in at the door. Needs a public form that never reveals the roster.
 - Roundtable planning: topics, speakers, agenda archive.
 - Commissioner follow-up notes per unit.

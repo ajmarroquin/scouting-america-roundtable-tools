@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "unit_manual_key" ON "unit" USING btree ("type","number",coalesce("gender_accepted", '')) WHERE "unit"."bsa_unit_id" is null;

@@ -23,8 +23,13 @@ export async function addUserAction(_prev: State, form: FormData): Promise<State
       email: String(form.get("email") ?? ""),
       name: String(form.get("name") ?? ""),
       role: String(form.get("role") ?? ""),
+      sendWelcome: form.get("welcome") === "on",
     }),
   );
+}
+
+export async function renameUserAction(userId: string, name: string): Promise<State> {
+  return asAdmin((actor) => users.renameUser(actor, String(userId), String(name)));
 }
 
 export async function changeRoleAction(_prev: State, form: FormData): Promise<State> {

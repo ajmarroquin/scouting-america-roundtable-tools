@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -50,6 +51,12 @@ export function AddUserForm() {
       <Button type="submit" disabled={pending}>
         {pending ? "Adding…" : "Add user"}
       </Button>
+      <div className="flex items-center gap-2 sm:col-span-4">
+        <Checkbox id="new-welcome" name="welcome" defaultChecked />
+        <Label htmlFor="new-welcome" className="font-normal">
+          Email them a welcome note with the link and how to sign in
+        </Label>
+      </div>
       {state && (
         <p
           role="status"

@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/roles";
 import type { Result } from "@/lib/users";
-import { changeRoleAction, removeUserAction } from "./actions";
+import { changeRoleAction, removeUserAction, renameUserAction } from "./actions";
 
 function useResultToast(state: Result | null) {
   useEffect(() => {
@@ -92,6 +93,70 @@ export function RemoveUserButton({ userId, email }: { userId: string; email: str
       <input type="hidden" name="userId" value={userId} />
       <Button type="submit" variant="destructive" size="sm" disabled={pending} aria-label={`Confirm removing ${email}`}>
         {pending ? "Removing…" : "Confirm remove"}
+      </Button>
+    </form>
+  );
+}
+
+export function UserName({ userId, name }: { userId: string; name: string }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(name);
+  const [pending, startTransition] = useTransition();
+
+  if (!editing) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        {name}
+        <Button variant="ghost" size="xs" aria-label={`Edit name for ${name}`} onClick={() => setEditing(true)}>
+          Edit
+        </Button>
+      </span>
+    );
+  }
+
+  return (
+    <form
+      className="flex items-center gap-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        startTransition(async () => {
+          const result = await renameUserAction(userId, value);
+          if (result?.ok) {
+            toast.success(result.message);
+            setEditing(false);
+          } else toast.error(result?.message ?? "Couldn't rename.");
+        });
+      }}
+    >
+      <Input
+        aria-label="Name"
+        className="h-7 w-40"
+        autoFocus
+        required
+        maxLength={80}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setValue(name);
+            setEditing(false);
+          }
+        }}
+      />
+      <Button type="submit" size="xs" disabled={pending}>
+        Save
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        disabled={pending}
+        onClick={() => {
+          setValue(name);
+          setEditing(false);
+        }}
+      >
+        Cancel
       </Button>
     </form>
   );

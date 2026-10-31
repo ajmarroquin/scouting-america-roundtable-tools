@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { NotAllowed } from "@/components/not-allowed";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
-import { listUnits } from "@/lib/contacts/queries";
+import { listUnits, positionsInUse } from "@/lib/contacts/queries";
 import { NewContactForm } from "./new-contact-form";
 
 export const metadata: Metadata = { title: "Add contact" };
@@ -26,6 +26,6 @@ export default function NewContactPage() {
 async function Gate() {
   const user = await requireUser();
   if (!hasRole(user.role, "editor")) return <NotAllowed need="editor" />;
-  const units = await listUnits();
-  return <NewContactForm units={units.filter((u) => u.active)} />;
+  const [units, fromRoster] = await Promise.all([listUnits(), positionsInUse()]);
+  return <NewContactForm units={units.filter((u) => u.active)} fromRoster={fromRoster} />;
 }

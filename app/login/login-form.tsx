@@ -123,6 +123,7 @@ export function LoginForm() {
               <Label htmlFor="code">Code</Label>
               <InputOTP
                 id="code"
+                containerClassName="w-full"
                 maxLength={6}
                 pattern={REGEXP_ONLY_DIGITS}
                 autoFocus
@@ -131,9 +132,9 @@ export function LoginForm() {
                 onChange={setCode}
                 onComplete={(value: string) => void verify(value)}
               >
-                <InputOTPGroup>
+                <InputOTPGroup className="w-full">
                   {Array.from({ length: 6 }, (_, i) => (
-                    <InputOTPSlot key={i} index={i} />
+                    <InputOTPSlot key={i} index={i} className="h-12! w-auto! flex-1 text-lg" />
                   ))}
                 </InputOTPGroup>
               </InputOTP>

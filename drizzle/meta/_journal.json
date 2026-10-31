@@ -15,6 +15,13 @@
       "when": 1793297554383,
       "tag": "0001_contacts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793451740868,
+      "tag": "0002_manual_units",
+      "breakpoints": true
     }
   ]
 }
