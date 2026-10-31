@@ -387,4 +387,34 @@ describe.skipIf(!local)("import against Postgres", () => {
     // Alex's check-ins named Troop 101 B, so they don't count for Pack 101.
     expect(detail!.people.map((p) => p.name)).not.toContain("Lex Example");
   });
+
+  it("reports unit coverage for a year against the unit list, with outreach contacts for units still to reach", async () => {
+    const metrics = await import("@/lib/attendance/metrics");
+    const c = await metrics.coverageForYear("2025-26");
+    // The old sheet reached Troop 101 B (Alex), Troop 101 G (Jordan), Pack 101 (Pat), and Crew 205 (Jim) of the 6 listed units.
+    expect(c).toMatchObject({ source: "list", total: 6, represented: 4 });
+    expect(c.meetings.map((m) => [m.date, m.represented.length, m.cumulative])).toEqual([
+      ["2025-11-01", 3, 3],
+      ["2026-01-15", 3, 4],
+      ["2026-02-01", 3, 4],
+      ["2026-04-01", 2, 4],
+      ["2026-05-01", 1, 4],
+    ]);
+    // Quinn came for Ship 303, which isn't on the list: shown, not counted.
+    expect(c.meetings[3].offList.map((id) => c.labels[id])).toEqual(["Ship 303"]);
+    const toReach = c.units.filter((u) => u.counted && u.meetings === 0).map((u) => u.label);
+    expect(toReach).toEqual(["Pack 404", "Troop 707"]);
+
+    // Outreach goes to top leaders, committee chairs, and chartered org reps only.
+    const troopB = c.units.find((u) => u.label === "Troop 101 B")!;
+    const leaders = await metrics.outreachContacts([troopB.id]);
+    expect(leaders.map((l) => [l.name, l.position]).sort()).toEqual([
+      ["Avery Transfer", "Committee Chair"],
+      ["Lex Example", "Scoutmaster"],
+    ]);
+
+    const nov = await metrics.meetingCoverage(c.meetings[0].id, "2025-11-01");
+    expect(nov).toMatchObject({ total: 6, year: "2025-26", meeting: { represented: expect.any(Array), newUnits: expect.any(Array) } });
+    expect(nov.meeting!.newUnits).toHaveLength(3);
+  });
 });

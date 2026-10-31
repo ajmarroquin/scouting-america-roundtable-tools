@@ -12,6 +12,7 @@ import { FORMAT_LABELS } from "@/lib/attendance/labels";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { AttendeesTable, DeleteMeetingButton, ExportMeetingButton, MeetingEditor } from "./meeting-detail";
+import { CoverageCards } from "./coverage-cards";
 import { PasteList } from "./paste-list";
 
 export const metadata: Metadata = { title: "Meeting" };
@@ -70,6 +71,8 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
           {unitsRepresented.length > 0 && `: ${unitsRepresented.map((u) => u.label).join(", ")}`}
         </p>
       )}
+
+      {m.status === "held" && <CoverageCards meetingId={m.id} date={m.date} />}
 
       {canEdit && m.status === "held" && <PasteList meetingId={m.id} people={people} />}
 

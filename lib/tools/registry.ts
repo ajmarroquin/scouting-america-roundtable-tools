@@ -36,6 +36,14 @@ export const TOOLS: Tool[] = [
     status: "live",
   },
   {
+    slug: "council-report",
+    name: "Council report",
+    description: "Unit coverage for the scouting year, the units still to reach, and an export for council.",
+    href: "/report",
+    minRole: "viewer",
+    status: "live",
+  },
+  {
     slug: "users",
     name: "Users",
     description: "Who can sign in and what they can do.",
