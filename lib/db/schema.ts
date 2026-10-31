@@ -11,6 +11,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -147,7 +148,13 @@ export const unit = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("unit_type_number_idx").on(t.type, t.number)],
+  (t) => [
+    index("unit_type_number_idx").on(t.type, t.number),
+    // Units added by hand have no Scouting America ID; keep them unique by name.
+    uniqueIndex("unit_manual_key")
+      .on(t.type, t.number, sql`coalesce(${t.genderAccepted}, '')`)
+      .where(sql`${t.bsaUnitId} is null`),
+  ],
 );
 
 export const CONTACT_STATUSES = ["active", "not_in_roster", "archived"] as const;

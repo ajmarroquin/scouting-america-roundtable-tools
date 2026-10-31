@@ -136,3 +136,9 @@ export async function listUnits(): Promise<UnitOption[]> {
   const rows = await db.select().from(unit);
   return rows.sort(compareUnits).map((u) => ({ id: u.id, label: unitLabel(u), type: u.type, active: u.active }));
 }
+
+/** Every position title in use, for the picker's "From the roster" group. */
+export async function positionsInUse(): Promise<string[]> {
+  const rows = await db.selectDistinct({ position: affiliation.position }).from(affiliation);
+  return rows.map((r) => r.position).sort();
+}

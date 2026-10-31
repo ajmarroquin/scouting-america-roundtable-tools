@@ -58,11 +58,9 @@ async function loadState(q: Executor, payload: ImportPayload) {
 
   const contacts: ExistingContact[] = rows.map((r) => ({ ...r, affiliations: affsByContact.get(r.id) ?? [] }));
   const unitRows = await q.select().from(unit);
-  const units: ExistingUnit[] = unitRows
-    .filter((u) => u.bsaUnitId)
-    .map((u) => ({
+  const units: ExistingUnit[] = unitRows.map((u) => ({
       id: u.id,
-      bsaUnitId: u.bsaUnitId!,
+      bsaUnitId: u.bsaUnitId,
       type: u.type as ExistingUnit["type"],
       number: u.number,
       genderAccepted: u.genderAccepted as ExistingUnit["genderAccepted"],
@@ -105,6 +103,9 @@ export async function commitImport(actor: CurrentUser, raw: unknown) {
       .values({ actorId: actor.id, actorEmail: actor.email, fileName: payload.fileName, district: payload.district, counts })
       .returning({ id: importRun.id });
 
+    for (const link of plan.units.linked) {
+      await tx.update(unit).set({ bsaUnitId: link.bsaUnitId }).where(eq(unit.id, link.unitId));
+    }
     for (const batch of chunks(payload.units)) {
       await tx
         .insert(unit)

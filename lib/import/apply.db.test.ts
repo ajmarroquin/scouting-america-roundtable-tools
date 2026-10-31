@@ -106,4 +106,57 @@ describe.skipIf(!local)("import against Postgres", () => {
   it("refuses a payload that fails validation", async () => {
     await expect(apply.commitImport(actor, { ...payload, people: [{ memberId: "" }] })).rejects.toThrow();
   });
+
+  it("adds a contact with two positions in a new unit, creating the unit once", async () => {
+    const contacts = await import("@/lib/contacts/mutations");
+    const newTroop = { kind: "new", type: "Troop", number: "888", genderAccepted: "B" } as const;
+    const result = await contacts.createContact(actor, {
+      firstName: "Hand",
+      lastName: "Added",
+      email: "hand@example.com",
+      phone: "",
+      isYouth: false,
+      guardianEmail: "",
+      source: "manual",
+      affiliations: [
+        { unit: newTroop, position: "Scoutmaster" },
+        { unit: newTroop, position: "Committee Member" },
+        { unit: { kind: "district" }, position: "Unit Commissioner" },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    const troops = await db.select().from(schema.unit).where(and(eq(schema.unit.type, "Troop"), eq(schema.unit.number, 888)));
+    expect(troops).toHaveLength(1);
+    expect(troops[0]).toMatchObject({ bsaUnitId: null, genderAccepted: "B", district: DISTRICT });
+    expect(await db.$count(schema.affiliation, eq(schema.affiliation.contactId, result.id!))).toBe(3);
+
+    // Picking "new unit" for a unit that already exists reuses it.
+    const again = await contacts.addAffiliation(actor, result.id!, { unit: newTroop, position: "Unit Treasurer" });
+    expect(again.ok).toBe(true);
+    expect(await db.$count(schema.unit, and(eq(schema.unit.type, "Troop"), eq(schema.unit.number, 888)))).toBe(1);
+  });
+
+  it("links a hand-added unit when the roster brings it in", async () => {
+    const [manual] = await db.select().from(schema.unit).where(eq(schema.unit.number, 888));
+    const withTroop888 = {
+      ...payload,
+      units: [...payload.units, { bsaUnitId: "900888", type: "Troop" as const, number: 888, genderAccepted: "B" as const, charteredOrg: null, district: DISTRICT }],
+    };
+    const { counts } = await apply.commitImport(actor, withTroop888);
+    expect(counts).toMatchObject({ unitsLinked: 1, unitsNew: 0 });
+    const [after] = await db.select().from(schema.unit).where(eq(schema.unit.id, manual.id));
+    expect(after.bsaUnitId).toBe("900888");
+    expect(await db.$count(schema.unit, eq(schema.unit.number, 888))).toBe(1);
+  });
+
+  it("deletes hand-added contacts but not roster ones", async () => {
+    const contacts = await import("@/lib/contacts/mutations");
+    const [hand] = await db.select().from(schema.contact).where(eq(schema.contact.email, "hand@example.com"));
+    const [roster] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
+    expect((await contacts.deleteContact(actor, roster.id)).ok).toBe(false);
+    expect((await contacts.deleteContact(actor, hand.id)).ok).toBe(true);
+    expect(await db.$count(schema.contact, eq(schema.contact.id, hand.id))).toBe(0);
+    expect(await db.$count(schema.affiliation, eq(schema.affiliation.contactId, hand.id))).toBe(0);
+    expect(await db.$count(schema.contact, eq(schema.contact.id, roster.id))).toBe(1);
+  });
 });

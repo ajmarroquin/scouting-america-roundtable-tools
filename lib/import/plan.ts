@@ -23,8 +23,10 @@ export type ExistingContact = {
   affiliations: ImportAffiliation[];
 };
 
-export type ExistingUnit = Omit<ImportUnit, "district"> & {
+export type ExistingUnit = Omit<ImportUnit, "district" | "bsaUnitId"> & {
   id: string;
+  /** Null for units added by hand. */
+  bsaUnitId: string | null;
   district: string | null;
   active: boolean;
 };
@@ -44,7 +46,14 @@ export type ImportPlan = {
   reactivated: number;
   /** Import contacts that were active and are no longer in the roster. */
   missing: { id: string; name: string; email: string | null }[];
-  units: { new: number; updated: number; deactivated: string[]; reactivated: number };
+  units: {
+    new: number;
+    updated: number;
+    deactivated: string[];
+    reactivated: number;
+    /** Hand-added units the roster now identifies: they get its unit ID instead of a duplicate. */
+    linked: { unitId: string; bsaUnitId: string }[];
+  };
 };
 
 const PERSON_FIELDS = [
@@ -112,7 +121,7 @@ export function planImport(
     unchanged: 0,
     reactivated: 0,
     missing: [],
-    units: { new: 0, updated: 0, deactivated: [], reactivated: 0 },
+    units: { new: 0, updated: 0, deactivated: [], reactivated: 0, linked: [] },
   };
 
   for (const person of payload.people) {
@@ -149,10 +158,17 @@ export function planImport(
   }
 
   const existingUnits = new Map(units.filter((u) => u.bsaUnitId).map((u) => [u.bsaUnitId, u]));
+  const unitKey = (u: { type: string; number: number; genderAccepted: string | null }) =>
+    `${u.type}|${u.number}|${u.genderAccepted ?? ""}`;
+  const manualUnits = new Map(units.filter((u) => !u.bsaUnitId).map((u) => [unitKey(u), u]));
   const fileUnits = new Set(payload.units.map((u) => u.bsaUnitId));
   for (const u of payload.units) {
     const e = existingUnits.get(u.bsaUnitId);
-    if (!e) plan.units.new++;
+    const manual = e ? undefined : manualUnits.get(unitKey(u));
+    if (manual) {
+      plan.units.linked.push({ unitId: manual.id, bsaUnitId: u.bsaUnitId });
+      manualUnits.delete(unitKey(u));
+    } else if (!e) plan.units.new++;
     else {
       if (!e.active) plan.units.reactivated++;
       if (
@@ -188,5 +204,6 @@ export function planCounts(plan: ImportPlan, payloadPeople: number): Record<stri
     unitsNew: plan.units.new,
     unitsUpdated: plan.units.updated,
     unitsDeactivated: plan.units.deactivated.length,
+    unitsLinked: plan.units.linked.length,
   };
 }

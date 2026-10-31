@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { z } from "zod";
 import type { Role } from "@/lib/auth/roles";
+import type { AffiliationInput } from "@/lib/contacts/affiliation-input";
 import { NotAllowedError, requireRole } from "@/lib/auth/session";
 import * as contacts from "@/lib/contacts/mutations";
 import { commitImport, previewImport, type ImportPreview } from "@/lib/import/apply";
@@ -36,12 +37,14 @@ export async function setArchivedAction(contactId: string, archived: boolean): P
   return withRole("editor", (actor) => contacts.setArchived(actor, contactId, archived === true));
 }
 
-export async function addAffiliationAction(
-  contactId: string,
-  input: { unitId: string | null; position: string },
-): Promise<Result> {
+export async function addAffiliationAction(contactId: string, input: AffiliationInput): Promise<Result> {
   if (!id.safeParse(contactId).success) return { ok: false, message: "Unknown contact." };
   return withRole("editor", (actor) => contacts.addAffiliation(actor, contactId, input));
+}
+
+export async function deleteContactAction(contactId: string): Promise<Result> {
+  if (!id.safeParse(contactId).success) return { ok: false, message: "Unknown contact." };
+  return withRole("editor", (actor) => contacts.deleteContact(actor, contactId));
 }
 
 export async function removeAffiliationAction(affiliationId: string): Promise<Result> {

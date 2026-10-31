@@ -14,7 +14,7 @@ import { hasRole, ROLE_DESCRIPTIONS, ROLE_LABELS, ROLES } from "@/lib/auth/roles
 import { requireUser } from "@/lib/auth/session";
 import { listUsers } from "@/lib/users";
 import { AddUserForm } from "./add-user-form";
-import { RemoveUserButton, RoleSelect } from "./user-row-actions";
+import { RemoveUserButton, RoleSelect, UserName } from "./user-row-actions";
 
 export const metadata: Metadata = { title: "Users" };
 
@@ -83,8 +83,13 @@ async function UsersPanel() {
                     You
                   </Badge>
                 )}
+                <div className="sm:hidden">
+                  <UserName key={u.name} userId={u.id} name={u.name} />
+                </div>
               </TableCell>
-              <TableCell className="hidden sm:table-cell">{u.name}</TableCell>
+              <TableCell className="hidden sm:table-cell">
+                <UserName key={u.name} userId={u.id} name={u.name} />
+              </TableCell>
               <TableCell>
                 <RoleSelect userId={u.id} role={u.role} />
               </TableCell>
