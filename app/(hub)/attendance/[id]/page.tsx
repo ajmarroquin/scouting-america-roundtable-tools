@@ -6,12 +6,13 @@ import { Suspense } from "react";
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getMeeting } from "@/lib/attendance/queries";
+import { checkInPeople, getMeeting } from "@/lib/attendance/queries";
 import { meetingDateLabel } from "@/lib/attendance/year";
+import { FORMAT_LABELS } from "@/lib/attendance/labels";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
-import { FORMAT_LABELS } from "../meeting-fields";
 import { AttendeesTable, DeleteMeetingButton, ExportMeetingButton, MeetingEditor } from "./meeting-detail";
+import { PasteList } from "./paste-list";
 
 export const metadata: Metadata = { title: "Meeting" };
 
@@ -36,6 +37,7 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
   if (!data) notFound();
   const { meeting: m, attendees, unitsRepresented } = data;
   const canEdit = hasRole(user.role, "editor");
+  const people = canEdit && m.status === "held" ? await checkInPeople() : [];
 
   return (
     <>
@@ -68,6 +70,8 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
           {unitsRepresented.length > 0 && `: ${unitsRepresented.map((u) => u.label).join(", ")}`}
         </p>
       )}
+
+      {canEdit && m.status === "held" && <PasteList meetingId={m.id} people={people} />}
 
       <AttendeesTable attendees={attendees} canEdit={canEdit} meetingId={m.id} />
 

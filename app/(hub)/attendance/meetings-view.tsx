@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon, UserCheckIcon } from "lucide-react";
+import { DownloadIcon, FileUpIcon, UserCheckIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -32,20 +32,23 @@ import {
 import { attendanceLong, attendanceMatrix } from "@/lib/attendance/export";
 import type { MeetingRow } from "@/lib/attendance/queries";
 import { meetingDateLabel, scoutingYearOf } from "@/lib/attendance/year";
+import { FORMAT_LABELS } from "@/lib/attendance/labels";
 import { downloadCsv, downloadXlsx } from "@/lib/export/download";
 import { createMeetingAction, exportAttendanceAction } from "./actions";
-import { FORMAT_LABELS, MeetingFields, type MeetingValues } from "./meeting-fields";
+import { MeetingFields, type MeetingValues } from "./meeting-fields";
 
 export function MeetingsView({
   meetings,
   today,
   currentYear,
   canEdit,
+  canImport,
 }: {
   meetings: MeetingRow[];
   today: string;
   currentYear: string;
   canEdit: boolean;
+  canImport: boolean;
 }) {
   const router = useRouter();
   const years = useMemo(
@@ -130,6 +133,13 @@ export function MeetingsView({
         <p className="mr-auto text-sm text-muted-foreground" role="status">
           {shown.filter((m) => m.status === "held").length} held, {shown.filter((m) => m.status === "cancelled").length} cancelled
         </p>
+        {canImport && (
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/attendance/import">
+              <FileUpIcon /> Load an old sheet
+            </Link>
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" disabled={shown.length === 0}>

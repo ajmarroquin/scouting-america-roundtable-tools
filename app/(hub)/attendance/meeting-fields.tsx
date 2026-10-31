@@ -10,12 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { FORMAT_LABELS } from "@/lib/attendance/labels";
 
-export const FORMAT_LABELS: Record<string, string> = {
-  in_person: "In person",
-  virtual: "Virtual",
-  hybrid: "Hybrid",
-};
 
 export type MeetingValues = {
   date: string;
