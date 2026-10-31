@@ -14,7 +14,7 @@ import { hasRole, ROLE_DESCRIPTIONS, ROLE_LABELS, ROLES } from "@/lib/auth/roles
 import { requireUser } from "@/lib/auth/session";
 import { listUsers } from "@/lib/users";
 import { AddUserForm } from "./add-user-form";
-import { RemoveUserButton, RoleSelect, UserName } from "./user-row-actions";
+import { RemoveUserButton, RoleSelect, SendWelcomeButton, UserName } from "./user-row-actions";
 
 export const metadata: Metadata = { title: "Users" };
 
@@ -94,7 +94,12 @@ async function UsersPanel() {
                 <RoleSelect userId={u.id} role={u.role} />
               </TableCell>
               <TableCell className="text-right">
-                {u.id !== me.id && <RemoveUserButton userId={u.id} email={u.email} />}
+                {u.id !== me.id && (
+                  <div className="flex justify-end gap-1">
+                    <SendWelcomeButton userId={u.id} email={u.email} />
+                    <RemoveUserButton userId={u.id} email={u.email} />
+                  </div>
+                )}
               </TableCell>
             </TableRow>
           ))}

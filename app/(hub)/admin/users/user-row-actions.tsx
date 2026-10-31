@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/roles";
 import type { Result } from "@/lib/users";
-import { changeRoleAction, removeUserAction, renameUserAction } from "./actions";
+import { changeRoleAction, removeUserAction, renameUserAction, sendWelcomeAction } from "./actions";
 
 function useResultToast(state: Result | null) {
   useEffect(() => {
@@ -95,6 +95,27 @@ export function RemoveUserButton({ userId, email }: { userId: string; email: str
         {pending ? "Removing…" : "Confirm remove"}
       </Button>
     </form>
+  );
+}
+
+export function SendWelcomeButton({ userId, email }: { userId: string; email: string }) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={pending}
+      aria-label={`Send a welcome email to ${email}`}
+      onClick={() =>
+        startTransition(async () => {
+          const result = await sendWelcomeAction(userId);
+          if (result?.ok) toast.success(result.message);
+          else toast.error(result?.message ?? "Couldn't send.", { duration: 15000 });
+        })
+      }
+    >
+      {pending ? "Sending…" : "Send welcome"}
+    </Button>
   );
 }
 

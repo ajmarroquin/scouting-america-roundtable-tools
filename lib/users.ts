@@ -5,6 +5,7 @@ import { isValidEmail, normalizeEmail } from "@/lib/auth/emails";
 import { isRole, ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import type { CurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { emailFailureReason } from "@/lib/email/errors";
 import { sendEmail } from "@/lib/email/send";
 import { appUrl, welcomeEmail } from "@/lib/email/welcome";
 import { user } from "@/lib/db/schema";
@@ -54,12 +55,33 @@ export async function addUser(
   const added = `Added ${email} as ${ROLE_LABELS[input.role]}.`;
   const url = appUrl(process.env);
   if (!input.sendWelcome) return { ok: true, message: `${added} Let them know to sign in at ${url}.` };
+  const failed = await deliverWelcome(actor, email, input.role);
+  return failed
+    ? { ok: true, message: `${added} The welcome email didn't send: ${failed}. Let them know to sign in at ${url}.` }
+    : { ok: true, message: `${added} A welcome email is on its way.` };
+}
+
+/** Sends the welcome email. Returns why it failed, or null when Resend accepted it. */
+async function deliverWelcome(actor: CurrentUser, email: string, role: Role): Promise<string | null> {
   try {
-    await sendEmail({ to: email, ...welcomeEmail({ inviterName: actor.name || actor.email, role: input.role, appUrl: url, email }) });
-    return { ok: true, message: `${added} A welcome email is on its way.` };
-  } catch {
-    return { ok: true, message: `${added} The welcome email didn't send, so let them know to sign in at ${url}.` };
+    const url = appUrl(process.env);
+    await sendEmail({ to: email, ...welcomeEmail({ inviterName: actor.name || actor.email, role, appUrl: url, email }) });
+    return null;
+  } catch (error) {
+    const reason = emailFailureReason(error);
+    console.error(`[email] welcome email didn't send: ${reason}`);
+    return reason;
   }
+}
+
+/** Sends (or re-sends) the welcome email to someone who already has access. */
+export async function sendWelcome(actor: CurrentUser, userId: string): Promise<Result> {
+  const target = await findUser(userId);
+  if (!target) return { ok: false, message: "That user no longer exists." };
+  const failed = await deliverWelcome(actor, target.email, isRole(target.role) ? target.role : "viewer");
+  if (failed) return { ok: false, message: `The welcome email didn't send: ${failed}.` };
+  await writeAudit(actor, "user.welcome", { type: "user", id: target.id }, { email: target.email });
+  return { ok: true, message: `Sent a welcome email to ${target.email}. Resend accepted it.` };
 }
 
 export async function renameUser(actor: CurrentUser, userId: string, rawName: string): Promise<Result> {

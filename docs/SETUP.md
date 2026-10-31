@@ -109,6 +109,7 @@ GitHub → repo **Settings** → **Code security**: turn on **Secret Protection*
 
 ## If something breaks
 
-- **No code arrives:** check Resend → Logs. If nothing is there, check the Vercel function logs for `RESEND_API_KEY` or `EMAIL_FROM` errors. Codes only go to people listed under Users.
+- **No code or welcome email arrives:** Users → **Send welcome** shows Resend's reason when a send fails, and failed sign-in codes log `[email] sign-in code didn't send: …` in the Vercel function logs. Then check Resend → Emails and Resend → Domains. Codes only go to people listed under Users.
+- **Mail reaches the maintainer but nobody else:** Resend has no verified sending domain, so it only delivers to the Resend account's own address. The Marketplace integration only connects a domain bought in the same Vercel account, so with DNS elsewhere, add the domain in Resend by hand (step 4), add its records wherever the DNS lives, wait for **Verified**, then set `EMAIL_FROM` to an address on that domain and redeploy. Don't set `EMAIL_FROM` before the domain shows Verified: Resend refuses an unverified domain for everyone, including you.
 - **"Too many requests":** three code requests per minute per network. Wait a minute.
 - **Locked out with no admin:** set `BOOTSTRAP_ADMIN_EMAILS` and make sure no user has the admin role (in Neon's SQL editor), then sign in again.

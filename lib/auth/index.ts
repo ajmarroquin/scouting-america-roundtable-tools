@@ -7,6 +7,7 @@ import { nextCookies } from "better-auth/next-js";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { db } from "@/lib/db";
 import { account, rateLimit, session, user, verification } from "@/lib/db/schema";
+import { emailFailureReason } from "@/lib/email/errors";
 import { sendEmail } from "@/lib/email/send";
 import { SIGN_IN_CODE_MINUTES, signInCodeEmail } from "@/lib/email/sign-in-code";
 import { ensureBootstrapAdmin } from "./bootstrap";
@@ -60,7 +61,13 @@ export const auth = betterAuth({
       storeOTP: "hashed",
       async sendVerificationOTP({ email, otp, type }) {
         if (type !== "sign-in") return;
-        await sendEmail({ to: email, ...signInCodeEmail(otp) });
+        try {
+          await sendEmail({ to: email, ...signInCodeEmail(otp) });
+        } catch (error) {
+          // The form says "sent" either way, so this log is the only trace of a failure.
+          console.error(`[email] sign-in code didn't send: ${emailFailureReason(error)}`);
+          throw error;
+        }
       },
     }),
     nextCookies(),

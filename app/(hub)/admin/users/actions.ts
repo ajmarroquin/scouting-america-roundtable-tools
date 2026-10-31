@@ -28,6 +28,10 @@ export async function addUserAction(_prev: State, form: FormData): Promise<State
   );
 }
 
+export async function sendWelcomeAction(userId: string): Promise<State> {
+  return asAdmin((actor) => users.sendWelcome(actor, String(userId)));
+}
+
 export async function renameUserAction(userId: string, name: string): Promise<State> {
   return asAdmin((actor) => users.renameUser(actor, String(userId), String(name)));
 }
