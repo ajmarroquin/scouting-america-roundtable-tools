@@ -55,6 +55,9 @@ describe("matchPerson", () => {
 
   it("uses the unit as a tie-breaker hint", () => {
     expect(top("Antonio Del Rosario", { unitHint: "Troop 662 B" }).candidates[0].reason).toContain("same unit");
+    expect(top("Antonio Del Rosario", { unitHint: "troop 662b, pack 662" }).candidates[0].reason).toContain("same unit");
+    expect(top("Antonio Del Rosario", { unitHint: "Troop 66" }).candidates[0].reason).not.toContain("same unit");
+    expect(top("Antonio Del Rosario", { unitHint: "Troop 662 G" }).candidates[0].reason).not.toContain("same unit");
   });
 
   it("reports nobody for a new person", () => {

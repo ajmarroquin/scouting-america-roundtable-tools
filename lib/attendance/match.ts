@@ -1,3 +1,5 @@
+import { parseUnitMentions, type UnitMention } from "./unit-mentions";
+
 // Matches a name typed somewhere else (an old sheet, a Zoom report) to a contact.
 // Confident matches are taken as-is; anything less goes to a person to review.
 
@@ -158,7 +160,12 @@ function lastNameScore(typedTokens: string[], c: MatchCandidate): { score: numbe
   return { score: 0, reason: "" };
 }
 
-function scoreCandidate(input: MatchInput, tokens: string[], c: MatchCandidate): Scored | null {
+/** "Troop 101" matches "Troop 101 B"; "Troop 101 G" doesn't, and neither does "Troop 1". */
+function sameUnit(a: UnitMention, b: UnitMention): boolean {
+  return a.number === b.number && (!a.type || !b.type || a.type === b.type) && (!a.gender || !b.gender || a.gender === b.gender);
+}
+
+function scoreCandidate(input: MatchInput, tokens: string[], hint: UnitMention[], c: MatchCandidate): Scored | null {
   if (input.email && c.email && input.email.trim().toLowerCase() === c.email.toLowerCase()) {
     return { id: c.id, score: 1, reason: "same email" };
   }
@@ -177,20 +184,18 @@ function scoreCandidate(input: MatchInput, tokens: string[], c: MatchCandidate):
     score = first.score * last.score;
     reason = last.score === 1 && first.score === 1 ? "same name" : `${first.reason}, ${last.reason}`;
   }
-  if (input.unitHint && c.units.length) {
-    const hint = normalizeName(input.unitHint).replace(/\s/g, "");
-    if (c.units.some((u) => hint.includes(normalizeName(u).replace(/\s/g, "")))) {
-      score = Math.min(1, score + 0.05);
-      reason += ", same unit";
-    }
+  if (hint.length && c.units.some((label) => parseUnitMentions(label).some((u) => hint.some((h) => sameUnit(h, u))))) {
+    score = Math.min(1, score + 0.05);
+    reason += ", same unit";
   }
   return { id: c.id, score: Math.round(score * 1000) / 1000, reason };
 }
 
 export function matchPerson(input: MatchInput, people: MatchCandidate[]): MatchResult {
   const tokens = normalizeName(input.name).split(" ").filter(Boolean);
+  const hint = parseUnitMentions(input.unitHint);
   const candidates = people
-    .map((c) => scoreCandidate(input, tokens, c))
+    .map((c) => scoreCandidate(input, tokens, hint, c))
     .filter((s): s is Scored => s !== null && s.score >= 0.4)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
