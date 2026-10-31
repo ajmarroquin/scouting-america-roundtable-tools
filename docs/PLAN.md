@@ -217,7 +217,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 0. Foundation (built) | Vercel project, Neon, custom subdomain, Resend domain, Better Auth OTP, users and roles, hub shell, CI | M | DNS and email deliverability |
 | 1. Contacts (built) | Units, contacts, affiliations; filters; copy emails; manual youth with parent email; CSV and XLSX export | M | Low |
 | 2. Import (built) | Roster parser, youth and district filters, dedupe, preview, save, log. Fuzzy review queue moves to Phase 3, where walk-ins and the legacy sheets need it. | L | Fuzzy match quality |
-| 3. Attendance | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
+| 3. Attendance (check-in built; old sheets and pasted lists next) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
 | 4. Metrics | Dashboard, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
 
@@ -243,6 +243,13 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
 - **Add contact** (editors): walk-ins and youth. Youth require a parent or guardian email, enforced by a database constraint.
 - **Import** (admins): parse in the browser, pick the district, see what's in the file, compare with current contacts, confirm. One transaction per import, serialized with an advisory lock. Logged in `import_run` and `audit_log` with counts only.
 - **Tests**: the parser and import plan are covered against the synthetic fixture; the database write runs against a real Postgres in CI.
+
+## Phase 3, part 1: what was built
+
+- **Meetings** (`/attendance`): one per date, held or cancelled, in person, virtual, or hybrid, with an optional topic. Listed by scouting year (September to August) with people and units counted per meeting. Editors add and edit; deleting a meeting, which takes its check-ins, is admin-only.
+- **Check-in** (`/attendance/[id]/check-in`, editors): built for a phone at the door. Search by name, preferred name, or unit; tap to check in, tap again to undo; the search clears after each check-in. "Add a walk-in" prefills the name from the search and checks them in. A walk-in who's already a contact (same email and first name) is just checked in.
+- **Meeting page**: who came, what unit each represented, and how they were checked in. A person in several units counts for all of them unless an editor picks the one they came for.
+- **Exports**: per scouting year, the old sheet's shape (people by meetings, "Attended", headcount row) and one row per check-in, as CSV or one Excel workbook; per meeting, a CSV.
 
 ## Open questions
 

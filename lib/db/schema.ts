@@ -226,3 +226,53 @@ export const setting = pgTable("setting", {
   value: jsonb("value").notNull(),
   updatedAt: updatedAt(),
 });
+
+// Attendance. One meeting per date; breakouts aren't tracked separately.
+
+export const MEETING_FORMATS = ["in_person", "virtual", "hybrid"] as const;
+export const MEETING_STATUSES = ["held", "cancelled"] as const;
+export const ATTENDANCE_METHODS = ["check_in", "walk_in", "pasted_list", "legacy_import", "manual"] as const;
+
+export const meeting = pgTable(
+  "meeting",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    date: date("date", { mode: "string" }).notNull().unique(),
+    title: text("title"),
+    format: text("format").notNull().default("in_person"),
+    status: text("status").notNull().default("held"),
+    notes: text("notes"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check("meeting_format_check", sql`${t.format} in ('in_person', 'virtual', 'hybrid')`),
+    check("meeting_status_check", sql`${t.status} in ('held', 'cancelled')`),
+  ],
+);
+
+export const attendance = pgTable(
+  "attendance",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meeting.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contact.id, { onDelete: "cascade" }),
+    // The unit they came for, when it matters. Null means all of their units count.
+    unitId: uuid("unit_id").references(() => unit.id, { onDelete: "set null" }),
+    method: text("method").notNull().default("check_in"),
+    checkedInAt: timestamp("checked_in_at", { withTimezone: true }).notNull().defaultNow(),
+    checkedInBy: text("checked_in_by").references(() => user.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    unique("attendance_meeting_contact_key").on(t.meetingId, t.contactId),
+    index("attendance_contact_idx").on(t.contactId),
+    check(
+      "attendance_method_check",
+      sql`${t.method} in ('check_in', 'walk_in', 'pasted_list', 'legacy_import', 'manual')`,
+    ),
+  ],
+);

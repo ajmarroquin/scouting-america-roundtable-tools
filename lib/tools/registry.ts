@@ -25,7 +25,7 @@ export const TOOLS: Tool[] = [
     description: "Check people in at roundtable and track unit coverage toward 100%.",
     href: "/attendance",
     minRole: "viewer",
-    status: "soon",
+    status: "live",
   },
   {
     slug: "users",

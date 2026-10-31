@@ -159,4 +159,69 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(await db.$count(schema.affiliation, eq(schema.affiliation.contactId, hand.id))).toBe(0);
     expect(await db.$count(schema.contact, eq(schema.contact.id, roster.id))).toBe(1);
   });
+
+  it("runs a meeting: create, refuse a second on the same date, check in, walk-in, represented unit", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const queries = await import("@/lib/attendance/queries");
+    const created = await att.createMeeting(actor, { date: "2026-11-19", title: "November", format: "in_person", status: "held", notes: "" });
+    expect(created.ok).toBe(true);
+    const again = await att.createMeeting(actor, { date: "2026-11-19", title: "", format: "hybrid", status: "held", notes: "" });
+    expect(again).toMatchObject({ ok: false, id: created.id });
+
+    const [alex] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
+    expect((await att.checkIn(actor, created.id!, alex.id)).ok).toBe(true);
+    expect(await att.checkIn(actor, created.id!, alex.id)).toMatchObject({ ok: true, alreadyIn: true });
+
+    // Walk-in: a new person is created and checked in; a repeat of the same person just checks in.
+    const walk = await att.addWalkIn(actor, created.id!, {
+      firstName: "Wanda",
+      lastName: "Walkin",
+      email: "wanda@example.com",
+      phone: "",
+      isYouth: false,
+      guardianEmail: "",
+      affiliations: [],
+    });
+    expect(walk.ok).toBe(true);
+    const repeat = await att.addWalkIn(actor, created.id!, {
+      firstName: "wanda",
+      lastName: "W",
+      email: "WANDA@example.com",
+      phone: "",
+      isYouth: false,
+      guardianEmail: "",
+      affiliations: [],
+    });
+    expect(repeat).toMatchObject({ ok: true, id: walk.id });
+    const [wanda] = await db.select().from(schema.contact).where(eq(schema.contact.id, walk.id!));
+    expect(wanda.source).toBe("walk_in");
+
+    const meetingView = await queries.getMeeting(created.id!);
+    expect(meetingView!.attendees).toHaveLength(2);
+    // Alex belongs to Troop 101 B and Pack 101: both count until one is recorded.
+    expect(meetingView!.unitsRepresented.map((u) => u.label).sort()).toEqual(["Pack 101", "Troop 101 B"]);
+    const alexRow = meetingView!.attendees.find((a) => a.contactId === alex.id)!;
+    const troop = alexRow.units.find((u) => u.label === "Troop 101 B")!;
+    expect((await att.setRepresentedUnit(actor, alexRow.attendanceId, troop.id)).ok).toBe(true);
+    expect((await queries.getMeeting(created.id!))!.unitsRepresented.map((u) => u.label)).toEqual(["Troop 101 B"]);
+
+    const list = await queries.listMeetings();
+    expect(list.find((m) => m.id === created.id)).toMatchObject({ attendees: 2, units: 1 });
+
+    const exported = await queries.attendanceForExport({ start: "2026-09-01", end: "2027-08-31" });
+    expect(exported.rows).toHaveLength(2);
+    expect(exported.rows.find((r) => r.contactId === alex.id)?.representing).toBe("Troop 101 B");
+  });
+
+  it("refuses check-ins at a cancelled meeting, and deleting a meeting takes its check-ins", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const cancelled = await att.createMeeting(actor, { date: "2026-12-17", title: "", format: "in_person", status: "cancelled", notes: "" });
+    const [alex] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
+    expect((await att.checkIn(actor, cancelled.id!, alex.id)).ok).toBe(false);
+
+    const [nov] = await db.select().from(schema.meeting).where(eq(schema.meeting.date, "2026-11-19"));
+    const deleted = await att.deleteMeeting(actor, nov.id);
+    expect(deleted).toMatchObject({ ok: true, message: expect.stringContaining("2 check-ins") });
+    expect(await db.$count(schema.attendance, eq(schema.attendance.meetingId, nov.id))).toBe(0);
+  });
 });
