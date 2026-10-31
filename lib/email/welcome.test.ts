@@ -14,6 +14,7 @@ describe("welcomeEmail", () => {
     expect(email.text).toContain("You're an Editor: Can also edit contacts");
     expect(email.text).toContain("https://rpc.example.com");
     expect(email.text).toContain("adam@example.com");
+    expect(email.text).toContain("Reply to this email to reach AJ <script>.");
   });
 
   it("escapes names in the html", () => {
