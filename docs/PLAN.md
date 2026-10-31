@@ -217,7 +217,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 0. Foundation (built) | Vercel project, Neon, custom subdomain, Resend domain, Better Auth OTP, users and roles, hub shell, CI | M | DNS and email deliverability |
 | 1. Contacts (built) | Units, contacts, affiliations; filters; copy emails; manual youth with parent email; CSV and XLSX export | M | Low |
 | 2. Import (built) | Roster parser, youth and district filters, dedupe, preview, save, log. Fuzzy review queue moves to Phase 3, where walk-ins and the legacy sheets need it. | L | Fuzzy match quality |
-| 3. Attendance (check-in built; old sheets and pasted lists next) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
+| 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
 | 4. Metrics | Dashboard, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
 
@@ -250,6 +250,19 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
 - **Check-in** (`/attendance/[id]/check-in`, editors): built for a phone at the door. Search by name, preferred name, or unit; tap to check in, tap again to undo; the search clears after each check-in. "Add a walk-in" prefills the name from the search and checks them in. A walk-in who's already a contact (same email and first name) is just checked in.
 - **Meeting page**: who came, what unit each represented, and how they were checked in. A person in several units counts for all of them unless an editor picks the one they came for.
 - **Exports**: per scouting year, the old sheet's shape (people by meetings, "Attended", headcount row) and one row per check-in, as CSV or one Excel workbook; per meeting, a CSV.
+
+## Phase 3, part 2: what was built
+
+- **Name matching** (`lib/attendance/match.ts`): matches a typed name to a contact by first and preferred name, nicknames (Jim and James), accents, compound last names (Del Rosario), small typos, and email. A unit named on the sheet breaks ties. Only a confident, unambiguous match is taken on its own; a first name alone, a last initial, or a close spelling goes to review.
+- **Review step** (shared): confident matches are picked; guesses wait until someone picks or takes the best guesses; "Someone else…" searches all contacts; unknown names are added as new contacts or skipped.
+- **Load an old sheet** (`/attendance/import`, admins): a CSV download or cells pasted from Google Sheets. Reads the Name column (or first and last), the Unit column, and one column per meeting headed by a month ("Nov 25") or a date; other columns become notes on new contacts.
+  - A month heading becomes the 1st of the month unless a meeting that month is already in the app; dates are editable.
+  - Empty past months default to cancelled, empty future months to "don't load", and a meeting already in the app keeps its status.
+  - New people are walk-ins. They get the units the sheet names as "Adult member", but only units already in the app that the text picks out without doubt ("troop 1 b, g" is Troop 1 B and Troop 1 G; "Troop 1" with both is left alone and noted).
+  - When the sheet names exactly one of a person's units, the check-in records it as the unit represented.
+  - Loading the same sheet twice adds nothing: meetings are found by date, and check-ins are one per person per meeting.
+- **Paste a list** (meeting page, editors): one name per line, a Zoom participant report (using the original name when someone renamed themselves), or cells from a sign-in sheet. After review, everyone is checked in with method "pasted list". A full name that matches nobody defaults to a new contact; a single word, like a device name, defaults to skip.
+- **Fixed**: the format badge on the meeting page was blank, because the page read the labels from a client-only file.
 
 ## Open questions
 

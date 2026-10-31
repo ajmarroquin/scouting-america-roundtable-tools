@@ -118,12 +118,15 @@ export async function meetingOn(date: string) {
   return m ?? null;
 }
 
-/** Everyone who can be checked in: all contacts except archived ones. Searched in the browser. */
-export async function checkInPeople(): Promise<CheckInPerson[]> {
+/**
+ * Everyone who can be checked in: all contacts except archived ones, unless
+ * `includeArchived` (an old sheet can name someone archived since). Searched in the browser.
+ */
+export async function checkInPeople(opts: { includeArchived?: boolean } = {}): Promise<CheckInPerson[]> {
   const rows = await db
     .select()
     .from(contact)
-    .where(ne(contact.status, "archived"))
+    .where(opts.includeArchived ? undefined : ne(contact.status, "archived"))
     .orderBy(asc(contact.lastName), asc(contact.firstName));
   const units = await unitsByContact(rows.map((r) => r.id));
   return rows.map((c) => ({

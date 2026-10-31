@@ -29,6 +29,13 @@
       "when": 1793452678414,
       "tag": "0003_attendance",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793454037862,
+      "tag": "0004_last_sign_in",
+      "breakpoints": true
     }
   ]
 }

@@ -224,4 +224,122 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(deleted).toMatchObject({ ok: true, message: expect.stringContaining("2 check-ins") });
     expect(await db.$count(schema.attendance, eq(schema.attendance.meetingId, nov.id))).toBe(0);
   });
+
+  it("loads an old attendance sheet after review, and a second run adds nothing", async () => {
+    const { parseLegacySheet, splitName } = await import("@/lib/attendance/legacy");
+    const { matchPerson } = await import("@/lib/attendance/match");
+    const { resolveUnitMentions } = await import("@/lib/attendance/unit-mentions");
+    const legacy = await import("@/lib/attendance/legacy-import");
+    const att = await import("@/lib/attendance/mutations");
+    const Papa = (await import("papaparse")).default;
+    const sheetText = readFileSync(path.join(import.meta.dirname, "../../tests/fixtures/attendance-sheet-sample.csv"), "utf8");
+    const sheet = parseLegacySheet(Papa.parse<string[]>(sheetText).data, "2026-10-31");
+    if ("error" in sheet) throw new Error(sheet.error);
+
+    // January's roundtable is already in the app, on its real date.
+    const jan = await att.createMeeting(actor, { date: "2026-01-15", title: "", format: "in_person", status: "held", notes: "" });
+
+    // What the review screen does: take confident matches, have a person confirm the rest, add the unknown.
+    const decide = async () => {
+      const data = await legacy.legacyMatchData();
+      return sheet.people.map((p) => {
+        const match = matchPerson({ name: p.name, unitHint: p.unitText }, data.people);
+        const { unitIds } = resolveUnitMentions(p.unitText, data.units);
+        const contact =
+          match.status === "none"
+            ? { kind: "new" as const, ...splitName(p.name), notes: p.notes.join("; ") }
+            : { kind: "existing" as const, id: match.candidates[0].id };
+        return { name: p.name, contact, unitIds, attended: p.attended, status: match.status };
+      });
+    };
+    const meetings = sheet.meetings.map((m) => ({
+      key: m.column,
+      date: m.header === "Jan 26" ? "2026-01-15" : m.date,
+      status: m.suggested === "held" ? ("held" as const) : ("cancelled" as const),
+    }));
+
+    const people = await decide();
+    expect(people.map((p) => [p.name, p.status])).toEqual([
+      ["Alex Example", "matched"],
+      ["Jim Placeholder", "matched"],
+      ["Jordan", "review"],
+      ["Pat Testcase", "matched"],
+      ["Casey Commish", "matched"],
+      ["Newt Visitor", "none"],
+      ["Quinn Nomial", "review"],
+    ]);
+
+    const first = await legacy.importLegacySheet(actor, { fileName: "sheet.csv", meetings, people });
+    expect(first).toMatchObject({
+      ok: true,
+      counts: { meetingsAdded: 6, meetingsFound: 1, contactsAdded: 1, checkIns: 15, alreadyIn: 0, skippedCancelled: 0 },
+    });
+    const [newt] = await db.select().from(schema.contact).where(eq(schema.contact.lastName, "Visitor"));
+    expect(newt).toMatchObject({ firstName: "Newt", source: "walk_in" });
+    // Pack 909 isn't a unit in the app, so Newt gets no position.
+    expect(await db.$count(schema.affiliation, eq(schema.affiliation.contactId, newt.id))).toBe(0);
+    expect(await db.$count(schema.attendance, eq(schema.attendance.meetingId, jan.id!))).toBe(3);
+
+    // "Troop 101 b, g" narrows Alex (Troop 101 B and Pack 101) to Troop 101 B.
+    const [alex] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
+    const [troopB] = await db
+      .select()
+      .from(schema.unit)
+      .where(and(eq(schema.unit.type, "Troop"), eq(schema.unit.number, 101), eq(schema.unit.genderAccepted, "B")));
+    const alexRows = await db.select().from(schema.attendance).where(eq(schema.attendance.contactId, alex.id));
+    expect(alexRows.filter((r) => r.method === "legacy_import").map((r) => r.unitId)).toEqual([troopB.id, troopB.id, troopB.id]);
+
+    const [dec] = await db.select().from(schema.meeting).where(eq(schema.meeting.date, "2025-12-01"));
+    expect(dec).toMatchObject({ status: "cancelled", notes: "Loaded from sheet.csv." });
+
+    // Run it again: Newt is matched now, and every check-in is already there.
+    const again = await decide();
+    expect(again.find((p) => p.name === "Newt Visitor")?.contact).toEqual({ kind: "existing", id: newt.id });
+    const second = await legacy.importLegacySheet(actor, { fileName: "sheet.csv", meetings, people: again });
+    expect(second).toMatchObject({ ok: true, counts: { meetingsAdded: 0, contactsAdded: 0, checkIns: 0, alreadyIn: 15 } });
+  });
+
+  it("refuses two columns on one date, and skips check-ins for a meeting already marked cancelled", async () => {
+    const legacy = await import("@/lib/attendance/legacy-import");
+    const [alex] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
+    const person = { name: "Alex Example", contact: { kind: "existing" as const, id: alex.id }, unitIds: [], attended: [1, 2] };
+    const clash = await legacy.importLegacySheet(actor, {
+      fileName: null,
+      meetings: [
+        { key: 1, date: "2025-09-01", status: "held" },
+        { key: 2, date: "2025-09-01", status: "held" },
+      ],
+      people: [person],
+    });
+    expect(clash).toMatchObject({ ok: false, message: expect.stringContaining("Two columns") });
+
+    // 2026-12-17 was created as cancelled earlier; the sheet can't override that.
+    const result = await legacy.importLegacySheet(actor, {
+      fileName: null,
+      meetings: [{ key: 1, date: "2026-12-17", status: "held" }],
+      people: [{ ...person, attended: [1] }],
+    });
+    expect(result).toMatchObject({ ok: true, counts: { meetingsFound: 1, checkIns: 0, skippedCancelled: 1 } });
+  });
+
+  it("checks in a reviewed pasted list: existing people, new people, and repeats", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const m = await att.createMeeting(actor, { date: "2027-01-21", title: "", format: "virtual", status: "held", notes: "" });
+    const [alex] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
+    const result = await att.bulkCheckIn(actor, m.id!, [
+      { kind: "existing", id: alex.id },
+      { kind: "new", firstName: "Zoe", lastName: "Zoomer", email: "zoe@example.com" },
+    ]);
+    expect(result).toMatchObject({ ok: true, message: "Checked in 2 people, added 1 new contact." });
+    const rows = await db.select().from(schema.attendance).where(eq(schema.attendance.meetingId, m.id!));
+    expect(rows.map((r) => r.method)).toEqual(["pasted_list", "pasted_list"]);
+
+    // Pasting the same report again: Zoe is found by email, and both are already in.
+    const again = await att.bulkCheckIn(actor, m.id!, [
+      { kind: "existing", id: alex.id },
+      { kind: "new", firstName: "Zoe", lastName: "Zoomer", email: "ZOE@example.com" },
+    ]);
+    expect(again).toMatchObject({ ok: true, message: "Checked in 0 people, 2 were already in." });
+    expect(await db.$count(schema.contact, eq(schema.contact.lastName, "Zoomer"))).toBe(1);
+  });
 });

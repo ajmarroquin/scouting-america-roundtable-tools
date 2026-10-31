@@ -117,3 +117,63 @@ export async function addWalkIn(
     ? { ok: true, message: `${created.message.replace(/\.$/, "")} and checked them in.`, id: created.id }
     : { ok: true, message: "They were already a contact, so they're checked in.", id: created.id };
 }
+
+const bulkItemSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("existing"), id: z.uuid() }),
+  z.object({
+    kind: z.literal("new"),
+    firstName: z.string().trim().min(1).max(80),
+    lastName: z.string().trim().max(80),
+    email: z.string().trim().max(254),
+  }),
+]);
+
+export type BulkCheckInItem = z.input<typeof bulkItemSchema>;
+
+/** Checks in a reviewed pasted list (a Zoom report, a sign-in sheet typed up later). */
+export async function bulkCheckIn(actor: CurrentUser, meetingId: string, raw: BulkCheckInItem[]): Promise<Result> {
+  const parsed = z.array(bulkItemSchema).min(1, "Nobody to check in.").max(500).safeParse(raw);
+  if (!parsed.success) return { ok: false, message: firstIssue(parsed.error) };
+  const [m] = await db.select({ status: meeting.status }).from(meeting).where(eq(meeting.id, meetingId));
+  if (!m) return { ok: false, message: "That meeting no longer exists." };
+  if (m.status !== "held") return { ok: false, message: "That meeting is marked cancelled. Change it to held first." };
+
+  let added = 0;
+  let already = 0;
+  let created = 0;
+  const failed: string[] = [];
+  for (const item of parsed.data) {
+    let contactId: string | undefined;
+    if (item.kind === "existing") contactId = item.id;
+    else {
+      const result = await createContact(actor, {
+        firstName: item.firstName,
+        lastName: item.lastName,
+        email: item.email,
+        phone: "",
+        isYouth: false,
+        guardianEmail: "",
+        affiliations: [],
+        source: "walk_in",
+      });
+      if (result.ok) created++;
+      contactId = result.id;
+      if (!contactId) {
+        failed.push(`${item.firstName} ${item.lastName}`.trim());
+        continue;
+      }
+    }
+    const result = await checkIn(actor, meetingId, contactId, "pasted_list");
+    if (!result.ok) failed.push(result.message);
+    else if (result.alreadyIn) already++;
+    else added++;
+  }
+  await writeAudit(actor, "attendance.paste", { type: "meeting", id: meetingId }, { added, already, created, failed: failed.length });
+  const parts = [
+    `Checked in ${added} ${added === 1 ? "person" : "people"}`,
+    already ? `${already} ${already === 1 ? "was" : "were"} already in` : null,
+    created ? `added ${created} new contact${created === 1 ? "" : "s"}` : null,
+    failed.length ? `couldn't add ${failed.join(", ")}` : null,
+  ].filter(Boolean);
+  return { ok: failed.length === 0 || added + already > 0, message: `${parts.join(", ")}.` };
+}

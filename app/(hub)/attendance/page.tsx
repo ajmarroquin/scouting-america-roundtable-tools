@@ -29,6 +29,7 @@ async function AttendanceData() {
       today={today}
       currentYear={scoutingYearOf(today)}
       canEdit={hasRole(user.role, "editor")}
+      canImport={hasRole(user.role, "admin")}
     />
   );
 }

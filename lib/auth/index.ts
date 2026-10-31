@@ -5,8 +5,10 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { emailOTP } from "better-auth/plugins/email-otp";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { account, rateLimit, session, user, verification } from "@/lib/db/schema";
+import { emailFailureReason } from "@/lib/email/errors";
 import { sendEmail } from "@/lib/email/send";
 import { SIGN_IN_CODE_MINUTES, signInCodeEmail } from "@/lib/email/sign-in-code";
 import { ensureBootstrapAdmin } from "./bootstrap";
@@ -42,6 +44,21 @@ export const auth = betterAuth({
     ipAddress: { ipAddressHeaders: ["x-vercel-forwarded-for", "x-forwarded-for"] },
     backgroundTasks: { handler: waitUntil },
   },
+  databaseHooks: {
+    session: {
+      create: {
+        // A session is only created at sign-in, so this is the last time they signed in.
+        async after(created) {
+          try {
+            await db.update(user).set({ lastSignInAt: new Date() }).where(eq(user.id, created.userId));
+          } catch (error) {
+            // Never block a sign-in over this.
+            console.error("[auth] couldn't record the sign-in time", error);
+          }
+        },
+      },
+    },
+  },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path === "/email-otp/send-verification-otp") {
@@ -60,7 +77,13 @@ export const auth = betterAuth({
       storeOTP: "hashed",
       async sendVerificationOTP({ email, otp, type }) {
         if (type !== "sign-in") return;
-        await sendEmail({ to: email, ...signInCodeEmail(otp) });
+        try {
+          await sendEmail({ to: email, ...signInCodeEmail(otp) });
+        } catch (error) {
+          // The form says "sent" either way, so this log is the only trace of a failure.
+          console.error(`[email] sign-in code didn't send: ${emailFailureReason(error)}`);
+          throw error;
+        }
       },
     }),
     nextCookies(),

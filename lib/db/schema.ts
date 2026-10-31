@@ -34,6 +34,8 @@ export const user = pgTable(
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
     role: text("role").notNull().default("viewer"),
+    /** Set by the app (not Better Auth) each time this person signs in. */
+    lastSignInAt: timestamp("last_sign_in_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
