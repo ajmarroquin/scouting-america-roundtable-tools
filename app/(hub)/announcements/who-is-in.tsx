@@ -10,17 +10,23 @@ import { audienceRosterAction } from "./actions";
 type State = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; roster: Reach<RosterPerson> };
 
 /** The people an audience reaches, and who's left out and why. */
-export function WhoIsIn({ audienceKey }: { audienceKey: string }) {
+export function WhoIsIn({ audienceKey, onCount }: { audienceKey: string; onCount?: (count: number) => void }) {
   const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
     let live = true;
     audienceRosterAction(audienceKey)
-      .then((r) => live && setState(r.ok ? { status: "ready", roster: r.roster } : { status: "error", message: r.message }))
+      .then((r) => {
+        if (!live) return;
+        setState(r.ok ? { status: "ready", roster: r.roster } : { status: "error", message: r.message });
+        if (r.ok) onCount?.(r.roster.members.length);
+      })
       .catch(() => live && setState({ status: "error", message: "Couldn't load who's in it." }));
     return () => {
       live = false;
     };
+    // onCount only reports; a new function each render shouldn't refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audienceKey]);
 
   if (state.status === "loading") return <p className="text-xs text-muted-foreground">Looking up who&apos;s in it…</p>;

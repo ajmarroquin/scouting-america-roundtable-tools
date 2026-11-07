@@ -27,7 +27,7 @@ import { attendanceLong, METHOD_LABELS } from "@/lib/attendance/export";
 import type { Attendee } from "@/lib/attendance/queries";
 import { downloadCsv } from "@/lib/export/download";
 import { deleteMeetingAction, setRepresentedUnitAction, undoCheckInAction, updateMeetingAction } from "../actions";
-import { MeetingFields, type MeetingValues } from "../meeting-fields";
+import { MeetingFields, type MeetingValues, type Saved } from "../meeting-fields";
 
 type Result = { ok: boolean; message: string };
 
@@ -132,7 +132,7 @@ export function AttendeesTable({ attendees, canEdit, meetingId }: { attendees: A
   );
 }
 
-export function MeetingEditor({ meetingId, initial, today }: { meetingId: string; initial: MeetingValues; today: string }) {
+export function MeetingEditor({ meetingId, initial, today, saved }: { meetingId: string; initial: MeetingValues; today: string; saved: Saved }) {
   const [values, setValues] = useState(initial);
   const [pending, start] = useTransition();
   return (
@@ -148,7 +148,7 @@ export function MeetingEditor({ meetingId, initial, today }: { meetingId: string
             start(async () => report(await updateMeetingAction(meetingId, values)));
           }}
         >
-          <MeetingFields idPrefix="edit" values={values} onChange={setValues} today={today} />
+          <MeetingFields idPrefix="edit" values={values} onChange={setValues} today={today} saved={saved} />
           <Button type="submit" className="w-fit" disabled={pending}>
             {pending ? "Saving…" : "Save"}
           </Button>

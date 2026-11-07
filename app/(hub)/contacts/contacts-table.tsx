@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox } from "@/components/ui/combobox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,29 +45,29 @@ import { addToGroupAction, createGroupAction, removeFromGroupAction } from "./gr
 const ALL = "all";
 const DISTRICT = "district";
 
+// Each filter can hold several choices: a contact matches any of them. Empty means no filter.
 type Filters = {
   q: string;
-  status: string;
-  program: string;
-  unit: string;
-  position: string;
+  status: string[];
+  program: string[];
+  unit: string[];
+  position: string[];
   email: string;
-  group: string;
+  group: string[];
 };
 
-type GroupOption = { value: string; label: string; custom: boolean };
+type GroupOption = { value: string; label: string; custom: boolean; description?: string };
 
-const DEFAULTS: Filters = { q: "", status: "active", program: ALL, unit: ALL, position: ALL, email: ALL, group: ALL };
+const DEFAULTS: Filters = { q: "", status: ["active"], program: [], unit: [], position: [], email: ALL, group: [] };
 
 function matches(c: ContactListItem, f: Filters, memberships: Record<string, string[]>): boolean {
-  if (f.group !== ALL && !memberships[c.id]?.includes(f.group)) return false;
-  if (f.status !== ALL && c.status !== f.status) return false;
+  if (f.group.length && !f.group.some((g) => memberships[c.id]?.includes(g))) return false;
+  if (f.status.length && !f.status.includes(c.status)) return false;
   if (f.email === "with" && !c.email) return false;
   if (f.email === "without" && c.email) return false;
-  if (f.program === DISTRICT && !c.affiliations.some((a) => !a.unitId)) return false;
-  if (f.program !== ALL && f.program !== DISTRICT && !c.affiliations.some((a) => a.unitType === f.program)) return false;
-  if (f.unit !== ALL && !c.affiliations.some((a) => a.unitId === f.unit)) return false;
-  if (f.position !== ALL && !c.affiliations.some((a) => a.position === f.position)) return false;
+  if (f.program.length && !f.program.some((p) => c.affiliations.some((a) => (p === DISTRICT ? !a.unitId : a.unitType === p)))) return false;
+  if (f.unit.length && !c.affiliations.some((a) => a.unitId && f.unit.includes(a.unitId))) return false;
+  if (f.position.length && !c.affiliations.some((a) => f.position.includes(a.position))) return false;
   if (f.q) {
     const q = f.q.toLowerCase();
     const hay = [
@@ -131,14 +132,14 @@ export function ContactsTable({
   canImport: boolean;
 }) {
   // A group link shows everyone in the group, whatever their status.
-  const [filters, setFilterState] = useState<Filters>(initialGroup ? { ...DEFAULTS, group: initialGroup, status: ALL } : DEFAULTS);
+  const [filters, setFilterState] = useState<Filters>(initialGroup ? { ...DEFAULTS, group: [initialGroup], status: [] } : DEFAULTS);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Picking people is for what's on screen, so a new filter starts a new pick.
   const setFilters = (next: Filters | ((f: Filters) => Filters)) => {
     setFilterState(next);
     setSelected(new Set());
   };
-  const set = (key: keyof Filters) => (value: string) => setFilters((f) => ({ ...f, [key]: value }));
+  const set = (key: keyof Filters) => (value: string | string[]) => setFilters((f) => ({ ...f, [key]: value }));
 
   const filtered = useMemo(() => contacts.filter((c) => matches(c, filters, memberships)), [contacts, filters, memberships]);
   const groupNames = useMemo(() => new Map(groupOptions.filter((g) => g.custom).map((g) => [g.value, g.label])), [groupOptions]);
@@ -155,7 +156,6 @@ export function ContactsTable({
   const programs = useMemo(() => {
     const present = new Set(contacts.flatMap((c) => c.affiliations.map((a) => a.unitType ?? DISTRICT)));
     return [
-      { value: ALL, label: "All programs" },
       ...UNIT_TYPE_ORDER.filter((t) => present.has(t)).map((t) => ({ value: t, label: `${t}s` })),
       ...(present.has(DISTRICT) ? [{ value: DISTRICT, label: "District positions" }] : []),
     ];
@@ -164,19 +164,14 @@ export function ContactsTable({
   const positions = useMemo(() => {
     const counts = new Map<string, number>();
     for (const c of contacts) for (const a of c.affiliations) counts.set(a.position, (counts.get(a.position) ?? 0) + 1);
-    return [
-      { value: ALL, label: "All positions" },
-      ...[...counts].sort((a, b) => b[1] - a[1]).map(([p]) => ({ value: p, label: p })),
-    ];
+    return [...counts].sort((a, b) => b[1] - a[1]).map(([p, n]) => ({ value: p, label: p, hint: `${n} ${n === 1 ? "person" : "people"}` }));
   }, [contacts]);
 
   const unitOptions = useMemo(
-    () => [
-      { value: ALL, label: "All units" },
-      ...units
-        .filter((u) => filters.program === ALL || u.type === filters.program)
-        .map((u) => ({ value: u.id, label: u.active ? u.label : `${u.label} (inactive)` })),
-    ],
+    () =>
+      units
+        .filter((u) => !filters.program.length || filters.program.includes(u.type))
+        .map((u) => ({ value: u.id, label: u.active ? u.label : `${u.label} (inactive)`, group: `${u.type}s` })),
     [units, filters.program],
   );
 
@@ -241,18 +236,25 @@ export function ContactsTable({
             onChange={(e) => set("q")(e.target.value)}
           />
         </div>
-        <FilterSelect label="Program" value={filters.program} onChange={(v) => setFilters((f) => ({ ...f, program: v, unit: ALL }))} options={programs} />
-        <FilterSelect label="Unit" value={filters.unit} onChange={set("unit")} options={unitOptions} />
-        <FilterSelect label="Position" value={filters.position} onChange={set("position")} options={positions} />
-        <FilterSelect
+        <Combobox
+          multiple
+          label="Program"
+          allLabel="All programs"
+          className="sm:w-40"
+          value={filters.program}
+          onChange={(v) => setFilters((f) => ({ ...f, program: v, unit: f.unit.filter((id) => !v.length || v.includes(units.find((u) => u.id === id)?.type ?? "")) }))}
+          options={programs}
+        />
+        <Combobox multiple label="Unit" allLabel="All units" className="sm:w-40" value={filters.unit} onChange={set("unit")} options={unitOptions} />
+        <Combobox multiple label="Position" allLabel="All positions" className="sm:w-44" value={filters.position} onChange={set("position")} options={positions} />
+        <Combobox
+          multiple
           label="Group"
+          allLabel="Any group"
+          className="sm:w-48"
           value={filters.group}
           onChange={set("group")}
-          options={[
-            { value: ALL, label: "Any group" },
-            ...groupOptions.filter((g) => !g.custom),
-            ...groupOptions.filter((g) => g.custom).map((g) => ({ value: g.value, label: `Group: ${g.label}` })),
-          ]}
+          options={groupOptions.map((g) => ({ value: g.value, label: g.label, hint: g.description, group: g.custom ? "Your groups" : "Built-in lists" }))}
         />
         <FilterSelect
           label="Email"
@@ -264,15 +266,17 @@ export function ContactsTable({
             { value: "without", label: "No email" },
           ]}
         />
-        <FilterSelect
+        <Combobox
+          multiple
           label="Status"
+          allLabel="Any status"
+          className="sm:w-44"
           value={filters.status}
           onChange={set("status")}
           options={[
             { value: "active", label: STATUS_LABELS.active },
             { value: "not_in_roster", label: STATUS_LABELS.not_in_roster },
             { value: "archived", label: STATUS_LABELS.archived },
-            { value: ALL, label: "Any status" },
           ]}
         />
         {filtersActive && (
@@ -286,7 +290,7 @@ export function ContactsTable({
         <GroupBar
           picked={[...selected]}
           groups={groupOptions.filter((g) => g.custom)}
-          filteredGroup={groupNames.has(filters.group) ? { key: filters.group, name: groupNames.get(filters.group)! } : null}
+          filteredGroup={filters.group.length === 1 && groupNames.has(filters.group[0]) ? { key: filters.group[0], name: groupNames.get(filters.group[0])! } : null}
           onDone={() => setSelected(new Set())}
         />
       )}

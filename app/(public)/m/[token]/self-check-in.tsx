@@ -4,15 +4,9 @@ import { CalendarPlusIcon, CheckCircle2Icon, PlusIcon, XIcon } from "lucide-reac
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { meetingIcs } from "@/lib/selfcheckin/ics";
 import type { Mode, Person, Response, UnitChoice } from "@/lib/selfcheckin/service";
 import { answerAction, answerNewAction, confirmAction, identifyAction, pickAction, registerAction } from "./actions";
@@ -316,18 +310,14 @@ function AddUnits({
         </div>
       ))}
       <div className="flex flex-col gap-2 sm:flex-row">
-        <Select value={unitId} onValueChange={setUnitId}>
-          <SelectTrigger aria-label="Unit" className="w-full sm:w-44">
-            <SelectValue placeholder="Pick a unit" />
-          </SelectTrigger>
-          <SelectContent>
-            {choices.map((u) => (
-              <SelectItem key={u.id} value={u.id}>
-                {u.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Combobox
+          label="Unit"
+          placeholder="Pick a unit"
+          className="h-9 sm:w-44"
+          value={unitId}
+          onChange={setUnitId}
+          options={choices.map((u) => ({ value: u.id, label: u.label, group: u.label.split(" ")[0] + "s" }))}
+        />
         <Input aria-label="Your role (optional)" placeholder="Your role (optional)" maxLength={80} value={role} onChange={(e) => setRole(e.target.value)} />
         <Button
           type="button"

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { checkInPeople, getMeeting } from "@/lib/attendance/queries";
+import { checkInPeople, getMeeting, savedMeetingDetails } from "@/lib/attendance/queries";
 import { hhmm, isUpcoming, timeRange } from "@/lib/attendance/schedule";
 import { appTimeZone, appToday } from "@/lib/attendance/today";
 import { checkInWindow, clockIn } from "@/lib/selfcheckin/rules";
@@ -187,6 +187,7 @@ async function MeetingView({ params }: { params: PageProps<"/roundtables/[id]">[
 
       {canEdit && (
         <MeetingEditor
+          saved={await savedMeetingDetails()}
           meetingId={m.id}
           today={today}
           initial={{

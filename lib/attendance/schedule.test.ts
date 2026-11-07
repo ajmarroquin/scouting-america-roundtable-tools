@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hhmm, isUpcoming, suggestedTimes, timeLabel, timeRange } from "./schedule";
+import { hhmm, isUpcoming, savedDetails, suggestedTimes, timeLabel, timeRange } from "./schedule";
 
 describe("meeting times", () => {
   it("reads times the way people say them", () => {
@@ -28,5 +28,15 @@ describe("meeting times", () => {
         { date: "2026-12-01", startTime: null, endTime: null },
       ]),
     ).toEqual({ start: "19:15", end: "20:30" });
+  });
+
+  it("offers places and join links already used, newest first, without repeats", () => {
+    expect(
+      savedDetails([
+        { date: "2026-10-01", place: "St. Mark's Hall", joinUrl: "https://zoom.us/j/1" },
+        { date: "2026-11-09", place: " Library ", joinUrl: null },
+        { date: "2026-09-01", place: "St. Mark's Hall", joinUrl: "https://zoom.us/j/1" },
+      ]),
+    ).toEqual({ places: ["Library", "St. Mark's Hall"], joinUrls: ["https://zoom.us/j/1"] });
   });
 });

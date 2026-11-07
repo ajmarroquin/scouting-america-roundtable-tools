@@ -13,6 +13,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { FORMAT_LABELS } from "@/lib/attendance/labels";
 import { isUpcoming } from "@/lib/attendance/schedule";
 
+/** Earlier places and join links, offered as you type and as a one-click fill when the field is empty. */
+export type Saved = { places: string[]; joinUrls: string[] };
+
+function UseLast({ value, onUse }: { value: string | undefined; onUse: (v: string) => void }) {
+  if (!value) return null;
+  return (
+    <button type="button" className="w-fit max-w-full truncate text-left text-xs text-muted-foreground underline underline-offset-2" onClick={() => onUse(value)}>
+      Use {value}
+    </button>
+  );
+}
+
 export type MeetingValues = {
   date: string;
   startTime: string;
@@ -30,6 +42,7 @@ export function MeetingFields({
   values,
   onChange,
   today,
+  saved = { places: [], joinUrls: [] },
   compact = false,
 }: {
   idPrefix: string;
@@ -37,6 +50,7 @@ export function MeetingFields({
   onChange: (v: MeetingValues) => void;
   /** The district's today, so a future meeting reads as scheduled rather than held. */
   today: string;
+  saved?: Saved;
   compact?: boolean;
 }) {
   const set = (patch: Partial<MeetingValues>) => onChange({ ...values, ...patch });
@@ -105,10 +119,17 @@ export function MeetingFields({
         <Input
           id={`${idPrefix}-place`}
           maxLength={200}
+          list={`${idPrefix}-places`}
           placeholder="For example, St. Mark's Hall, 123 Main St"
           value={values.place}
           onChange={(e) => set({ place: e.target.value })}
         />
+        <datalist id={`${idPrefix}-places`}>
+          {saved.places.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
+        {!values.place && <UseLast value={saved.places[0]} onUse={(place) => set({ place })} />}
       </div>
       {values.format !== "in_person" && (
         <div className="flex flex-col gap-2">
@@ -117,10 +138,17 @@ export function MeetingFields({
             id={`${idPrefix}-join`}
             type="url"
             maxLength={500}
+            list={`${idPrefix}-joins`}
             placeholder="https://zoom.us/j/…"
             value={values.joinUrl}
             onChange={(e) => set({ joinUrl: e.target.value })}
           />
+          <datalist id={`${idPrefix}-joins`}>
+            {saved.joinUrls.map((u) => (
+              <option key={u} value={u} />
+            ))}
+          </datalist>
+          {!values.joinUrl && <UseLast value={saved.joinUrls[0]} onUse={(joinUrl) => set({ joinUrl })} />}
         </div>
       )}
       {!compact && (

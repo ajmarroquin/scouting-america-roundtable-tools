@@ -35,3 +35,10 @@ export function suggestedTimes(meetings: { date: string; startTime: string | nul
   const latest = [...meetings].filter((m) => m.startTime).sort((a, b) => b.date.localeCompare(a.date))[0];
   return latest ? { start: hhmm(latest.startTime), end: hhmm(latest.endTime) || DEFAULT_TIMES.end } : { ...DEFAULT_TIMES };
 }
+
+/** Places and join links already used, most recent first, so they can be picked again instead of typed. */
+export function savedDetails(meetings: { date: string; place: string | null; joinUrl: string | null }[]): { places: string[]; joinUrls: string[] } {
+  const recent = [...meetings].sort((a, b) => b.date.localeCompare(a.date));
+  const distinct = (values: (string | null)[]) => [...new Set(values.map((v) => v?.trim()).filter((v): v is string => !!v))].slice(0, 8);
+  return { places: distinct(recent.map((m) => m.place)), joinUrls: distinct(recent.map((m) => m.joinUrl)) };
+}
