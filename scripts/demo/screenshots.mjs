@@ -216,7 +216,7 @@ const october = await newMeeting("2026-10-15", "Popcorn and recharter", null);
 const phone = await session(EDITOR, { width: 390, height: 844 });
 await phone.goto(`${october}/check-in`);
 await phone.waitForLoadState("networkidle");
-const arrivals = world.adults.filter((_, i) => i % 5 === 2).slice(0, 9);
+const arrivals = [...world.adults.filter((_, i) => i % 9 === 3).slice(0, 6), ...world.adults.filter((_, i) => i % 5 === 2).slice(0, 3)];
 for (const a of arrivals) {
   await phone.getByLabel("Search people to check in").fill(a.last);
   await phone.getByRole("button", { name: new RegExp(`${escapeRegExp(a.last)}.*Check in`) }).first().click();
@@ -250,7 +250,7 @@ await shot(admin, "units");
 await admin.getByRole("link", { name: "Pack 12", exact: true }).click();
 await admin.waitForURL(/\/units\/[0-9a-f-]{36}/);
 await shot(admin, "unit", true);
-await open(admin, "/report?year=2025-26");
+await open(admin, "/report?year=2026-27");
 await shot(admin, "council-report", true);
 
 await browser.close();

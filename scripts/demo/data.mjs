@@ -206,7 +206,8 @@ export function attendanceSheetCsv(world) {
 
 /** A Zoom participant report for a virtual roundtable, with a renamed attendee and a device. */
 export function zoomReportCsv(world) {
-  const people = world.adults.filter((_, i) => i % 4 === 1).slice(0, 11);
+  // Mostly last year's regulars, plus a few new faces.
+  const people = [...world.adults.filter((_, i) => i % 6 === 0).slice(0, 7), ...world.adults.filter((_, i) => i % 4 === 1).slice(0, 4)];
   const lines = ["Name (original name),User email,Join time,Leave time,Duration (minutes),Guest"];
   people.forEach((a, i) => {
     const name = i === 3 ? `${a.first} ${a.last.slice(0, 1)} (${a.first} ${a.last})` : `${a.first} ${a.last}`;

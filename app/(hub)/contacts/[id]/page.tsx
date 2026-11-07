@@ -6,6 +6,9 @@ import { Suspense } from "react";
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { METHOD_LABELS } from "@/lib/attendance/export";
+import { contactRecord } from "@/lib/attendance/queries";
+import { meetingDateLabel } from "@/lib/attendance/year";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/lib/contacts/format";
@@ -40,7 +43,7 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
   const { id } = await params;
   const user = await requireUser();
   if (!z.uuid().safeParse(id).success) notFound();
-  const [c, units, rosterTitles] = await Promise.all([getContact(id), listUnits(), positionsInUse()]);
+  const [c, units, rosterTitles, history] = await Promise.all([getContact(id), listUnits(), positionsInUse(), contactRecord(id)]);
   if (!c) notFound();
   const canEdit = hasRole(user.role, "editor");
   const fromRoster = c.source === "import";
@@ -112,6 +115,37 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
           <CardContent className="text-sm whitespace-pre-wrap">{c.notes}</CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Roundtables</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm" role="status">
+            {history.record.attended} of {history.record.held} this scouting year ({history.year})
+            {history.record.last && ` · last on ${meetingDateLabel(history.record.last, "short")}`}
+            {history.record.streak > 1 && ` · ${history.record.streak} in a row`}
+          </p>
+          {history.meetings.length > 0 ? (
+            <ul className="flex flex-col divide-y rounded-lg border text-sm">
+              {history.meetings.slice(0, 12).map((m) => (
+                <li key={m.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                  <Link href={`/attendance/${m.id}`} className="underline-offset-4 hover:underline">
+                    {meetingDateLabel(m.date)}
+                    {m.title ? ` · ${m.title}` : ""}
+                  </Link>
+                  <span className="text-xs text-muted-foreground">{METHOD_LABELS[m.method] ?? m.method}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">Hasn&apos;t been to a roundtable yet.</p>
+          )}
+          {history.meetings.length > 12 && (
+            <p className="text-xs text-muted-foreground">Showing the 12 most recent of {history.meetings.length}.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <AffiliationList
         contactId={c.id}
