@@ -107,6 +107,12 @@ Preview builds never use the production database. The Neon integration attaches 
 
 GitHub → repo **Settings** → **Code security**: turn on **Secret Protection** and **Push protection**. Both are free for public repos and block commits that contain keys.
 
+## Announcements
+
+Announcements use Resend's contacts, segments, and broadcasts, which need a full-access API key. If an announcement fails with "the Resend API key can only send email", create a key in Resend with **Full access**, add it to the Vercel project as `RESEND_BROADCAST_API_KEY` (Production), and redeploy. Sign-in codes keep using `RESEND_API_KEY`.
+
+Send yourself a test from the Announcements page first, and make the first real send go to a small group that expects it, such as unit leaders.
+
 ## If something breaks
 
 - **No code or welcome email arrives:** Users → **Send welcome** shows Resend's reason when a send fails, and failed sign-in codes log `[email] sign-in code didn't send: …` in the Vercel function logs. Then check Resend → Emails and Resend → Domains. Codes only go to people listed under Users.

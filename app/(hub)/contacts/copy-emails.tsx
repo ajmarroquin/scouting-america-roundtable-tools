@@ -38,7 +38,7 @@ function savePrefs(prefs: { separator: Separator; batch: string }) {
 export function CopyEmails({ contacts }: { contacts: EmailSource[] }) {
   const [open, setOpen] = useState(false);
   const [prefs, setPrefs] = useState(loadPrefs);
-  const { emails, withoutEmail } = useMemo(() => collectEmails(contacts), [contacts]);
+  const { emails, withoutEmail, unsubscribed } = useMemo(() => collectEmails(contacts), [contacts]);
   const groups = batchEmails(emails, prefs.batch === "all" ? null : Number(prefs.batch));
 
   const update = (next: Partial<typeof prefs>) => {
@@ -51,7 +51,8 @@ export function CopyEmails({ contacts }: { contacts: EmailSource[] }) {
     try {
       await navigator.clipboard.writeText(joinEmails(group, prefs.separator));
       const missing = withoutEmail ? ` ${withoutEmail} contact${withoutEmail === 1 ? " has" : "s have"} no email.` : "";
-      toast.success(`Copied ${label}.${missing}`, { description: "Paste into BCC so addresses stay private." });
+      const left = unsubscribed ? ` Left out ${unsubscribed} who unsubscribed.` : "";
+      toast.success(`Copied ${label}.${missing}${left}`, { description: "Paste into BCC so addresses stay private." });
     } catch {
       toast.error("Your browser blocked the clipboard. Try again, or use Export.");
     }

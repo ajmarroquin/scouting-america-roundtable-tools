@@ -1,4 +1,4 @@
-export type EmailSource = { email: string | null; isYouth: boolean; guardianEmail: string | null };
+export type EmailSource = { email: string | null; isYouth: boolean; guardianEmail: string | null; unsubscribed?: boolean };
 
 export type Separator = "comma" | "semicolon";
 
@@ -6,10 +6,11 @@ export type Separator = "comma" | "semicolon";
  * The deduped addresses for a list of contacts. A youth contact always brings
  * their parent or guardian along, so no message to a youth goes out one-on-one.
  */
-export function collectEmails(contacts: EmailSource[]): { emails: string[]; withoutEmail: number } {
+export function collectEmails(contacts: EmailSource[]): { emails: string[]; withoutEmail: number; unsubscribed: number } {
   const seen = new Set<string>();
   const emails: string[] = [];
   let withoutEmail = 0;
+  let unsubscribed = 0;
   const add = (e: string | null) => {
     if (!e) return;
     const key = e.toLowerCase();
@@ -19,11 +20,16 @@ export function collectEmails(contacts: EmailSource[]): { emails: string[]; with
     }
   };
   for (const c of contacts) {
+    // Someone who unsubscribed from announcements doesn't get bulk email from us at all.
+    if (c.unsubscribed) {
+      unsubscribed++;
+      continue;
+    }
     if (!c.email && !(c.isYouth && c.guardianEmail)) withoutEmail++;
     add(c.email);
     if (c.isYouth) add(c.guardianEmail);
   }
-  return { emails, withoutEmail };
+  return { emails, withoutEmail, unsubscribed };
 }
 
 export function joinEmails(emails: string[], separator: Separator): string {

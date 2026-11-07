@@ -1,4 +1,4 @@
-import { ChartColumnIncreasingIcon, ClipboardCheckIcon, ContactRoundIcon, ShieldCheckIcon, TentIcon, type LucideIcon } from "lucide-react";
+import { ChartColumnIncreasingIcon, ClipboardCheckIcon, ContactRoundIcon, MegaphoneIcon, ShieldCheckIcon, TentIcon, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ const ICONS: Record<string, LucideIcon> = {
   attendance: ClipboardCheckIcon,
   units: TentIcon,
   "council-report": ChartColumnIncreasingIcon,
+  announcements: MegaphoneIcon,
   users: ShieldCheckIcon,
 };
 

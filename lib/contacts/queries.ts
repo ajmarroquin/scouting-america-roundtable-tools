@@ -31,6 +31,8 @@ export type ContactListItem = {
   status: string;
   source: string;
   multipleRegistrations: boolean;
+  /** Unsubscribed from announcements; left out of announcements and copy-emails. */
+  unsubscribed: boolean;
   affiliations: AffiliationView[];
 };
 
@@ -104,6 +106,7 @@ function toListItem(c: typeof contact.$inferSelect, affs: AffiliationView[]): Co
     status: c.status,
     source: c.source,
     multipleRegistrations: c.multipleRegistrations,
+    unsubscribed: c.unsubscribedAt !== null,
     affiliations: affs,
   };
 }

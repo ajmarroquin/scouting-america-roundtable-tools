@@ -253,6 +253,18 @@ await shot(admin, "unit", true);
 await open(admin, "/report?year=2026-27");
 await shot(admin, "council-report", true);
 
+// An announcement to the units nobody has come for yet, ready to send.
+await open(admin, "/announcements");
+await admin.getByRole("combobox", { name: "To" }).click();
+await admin.getByRole("option", { name: /^Units not at roundtable yet this year/ }).click();
+await admin.getByLabel("Subject").fill("We'd love to see your unit at roundtable");
+await admin
+  .getByLabel("Message")
+  .fill(
+    "Hi {first name},\n\nOur next roundtable is **Thursday, Nov 19 at 7pm** at Riverbend Community Center. It's an hour of program ideas, recharter help, and the chance to meet other leaders.\n\n- Winter camping tips\n- Recharter questions answered\n- Pizza\n\nRSVP or ask anything: just reply to this email.",
+  );
+await shot(admin, "announcements");
+
 await browser.close();
 stop();
 console.log(`demo: done. Screenshots in ${path.relative(root, OUT)}/`);

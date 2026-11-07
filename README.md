@@ -52,6 +52,12 @@ The number council asks for: the share of units with at least one person at a ro
 
 ![The council report: coverage, units still to reach, and a breakdown](docs/screenshots/council-report.png)
 
+### Announcements
+
+Email a group straight from contacts: everyone, unit leaders, the units you haven't reached this year, or pack, troop, or district people. You see a preview, send yourself a test, and then send through Resend. Every message has an unsubscribe link, replies come to whoever sent it, and anyone who unsubscribes is left out of later announcements and copied email lists.
+
+![Writing an announcement to the units not at roundtable yet](docs/screenshots/announcements.png)
+
 ## Privacy
 
 <img src="docs/screenshots/sign-in.png" alt="Signing in with an email code" width="600">

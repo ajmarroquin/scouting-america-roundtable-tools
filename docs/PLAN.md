@@ -219,7 +219,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 2. Import (built) | Roster parser, youth and district filters, dedupe, preview, save, log. Fuzzy review queue moves to Phase 3, where walk-ins and the legacy sheets need it. | L | Fuzzy match quality |
 | 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
 | 4. Metrics (built) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
-| 5. Announcements | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
+| 5. Announcements (built) | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
 
@@ -295,6 +295,17 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
   - Each roundtable's headcount next to the same month last year.
   - The Excel export adds these to the summary, a "Same month last year" column, and a By program sheet.
 - **Contact page**: a Roundtables card with this year's count of those held, the last one attended, the current streak, and the most recent roundtables with how each was recorded.
+
+## Phase 5: what was built
+
+- **Announcements** (`/announcements`, admins): pick an audience, write a subject and message, preview it, send yourself a test, then confirm and send.
+  - **Audiences** (`lib/announcements/audiences.ts`): everyone, unit leaders (top leader, committee chair, chartered org rep), units not at roundtable yet this year, pack, troop, and crew or ship leaders, district volunteers, and people who came this year. Always adults with an email who are still in the roster or were added by hand, one per address, and never anyone unsubscribed.
+  - **Message** (`lib/announcements/render.ts`): plain text with blank lines for paragraphs, "- " lists, links, **bold**, and {first name}. Everything typed is escaped. Every message ends with who sent it and Resend's unsubscribe link.
+  - **Sending** (`lib/announcements/send.ts`): first pick up new unsubscribes from Resend, then make the audience's Resend segment match who's in it now (one contact import plus removing anyone who left), then send a broadcast to it. Replies go to the admin who sent it. Each send, or failure with its reason, is kept in a history table and the audit log.
+- **Unsubscribes**: pulled from Resend before each send and by a "Check Resend" button. The contact gets an Unsubscribed badge and is left out of announcements, copied emails, and the Resend export.
+- **Keys**: contacts, segments, and broadcasts need a full-access Resend key. The Marketplace key may only send email; in that case add a full-access key as `RESEND_BROADCAST_API_KEY` (the app says so if it hits that).
+- **Limits**: Resend's free plan covers marketing email for up to 1,000 contacts, separate from the 100-a-day sign-in email cap, as far as Resend's published plans show. Check before the list grows past that.
+- Without a Resend key locally, sends are logged instead (`DEV_UNSUBSCRIBED` fakes unsubscribes for testing).
 
 ## Demo and screenshots
 
