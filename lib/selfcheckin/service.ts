@@ -2,12 +2,12 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { appTimeZone } from "@/lib/attendance/today";
+import { appTimeZone, appToday } from "@/lib/attendance/today";
 import { writeAudit } from "@/lib/audit";
 import type { CurrentUser } from "@/lib/auth/session";
 import { compareUnits, contactName, unitLabel } from "@/lib/contacts/format";
 import { db } from "@/lib/db";
-import { affiliation, attendance, attendanceUnit, checkinReview, contact, meeting, publicRateLimit, unit } from "@/lib/db/schema";
+import { affiliation, attendance, attendanceUnit, checkinReview, contact, meeting, publicRateLimit, rsvp, unit } from "@/lib/db/schema";
 import { checkInWindow, looksLikeEmail, matchPeople, normalizeEmail, normalizeName, SELF_REPORTED_ROLE, type WindowState } from "./rules";
 
 // The public meeting page. Nobody is signed in here, so instead of
@@ -16,6 +16,7 @@ import { checkInWindow, looksLikeEmail, matchPeople, normalizeEmail, normalizeNa
 // name. It never shows anything but a first name and unit labels.
 
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
+const meetingIdSchema = z.uuid();
 const GENERIC = "That didn't work. Check with the volunteer at the table.";
 const LIMITS = { perIp: { max: 60, seconds: 600 }, perEmail: { max: 10, seconds: 3600 } };
 
@@ -30,10 +31,15 @@ export type PublicMeeting = {
   /** Never put on the page: given out only after someone checks in. */
   joinUrl: string | null;
   window: WindowState;
+  /** Before check-in opens (or on a future day, for a meeting with no time yet), the page takes RSVPs. */
+  rsvpOpen: boolean;
 };
 
+export type Mode = "check_in" | "rsvp";
+export type Response = "yes" | "no";
+
 export type UnitChoice = { id: string; label: string };
-export type Person = { contactId: string; firstName: string; units: UnitChoice[]; alreadyIn: boolean };
+export type Person = { contactId: string; firstName: string; units: UnitChoice[]; alreadyIn: boolean; rsvp: Response | null };
 
 export type IdentifyResult =
   | { ok: false; message: string }
@@ -47,7 +53,9 @@ export async function publicMeeting(token: string, now = new Date()): Promise<Pu
   if (!TOKEN.test(token)) return null;
   const [m] = await db.select().from(meeting).where(eq(meeting.publicToken, token));
   if (!m) return null;
+  const window = checkInWindow(m, now, appTimeZone());
   return {
+    rsvpOpen: m.status === "held" && (window.state === "before" || (window.state === "no_time" && m.date >= appToday())),
     id: m.id,
     date: m.date,
     startTime: m.startTime,
@@ -56,7 +64,7 @@ export async function publicMeeting(token: string, now = new Date()): Promise<Pu
     format: m.format,
     place: m.place,
     joinUrl: m.format === "in_person" ? null : m.joinUrl,
-    window: checkInWindow(m, now, appTimeZone()),
+    window,
   };
 }
 
@@ -85,10 +93,13 @@ export async function allow(key: string, max: number, seconds: number): Promise<
 type Gate = { ok: true; meeting: PublicMeeting } | { ok: false; message: string };
 
 /** The checks every public step makes: a real link, an open window, not a bot, not too many tries. */
-async function gate(token: string, input: { email?: string; website?: string }, ip: string, now: Date): Promise<Gate> {
+async function gate(token: string, input: { email?: string; website?: string }, ip: string, now: Date, mode: Mode = "check_in"): Promise<Gate> {
   const m = await publicMeeting(token, now);
   if (!m) return { ok: false, message: "This link isn't working. Ask the volunteer at the table." };
-  if (m.window.state !== "open") return { ok: false, message: "Check-in isn't open right now." };
+  if (mode === "check_in" && m.window.state !== "open") return { ok: false, message: "Check-in isn't open right now." };
+  if (mode === "rsvp" && !m.rsvpOpen) {
+    return { ok: false, message: m.window.state === "open" ? "Check-in is open now. Reload the page to check in." : "RSVPs for this meeting are closed." };
+  }
   // A hidden field people never see. Bots fill it in.
   if (input.website) return { ok: false, message: GENERIC };
   if (!(await allow(`ip:${m.id}:${ip}`, LIMITS.perIp.max, LIMITS.perIp.seconds))) {
@@ -129,14 +140,24 @@ async function unitsOf(contactId: string): Promise<UnitChoice[]> {
 }
 
 async function personFor(meetingId: string, c: { id: string; firstName: string; preferredName: string | null }): Promise<Person> {
-  const [units, [existing]] = await Promise.all([
+  const [units, [existing], [answer]] = await Promise.all([
     unitsOf(c.id),
     db
       .select({ id: attendance.id })
       .from(attendance)
       .where(and(eq(attendance.meetingId, meetingId), eq(attendance.contactId, c.id))),
+    db
+      .select({ response: rsvp.response })
+      .from(rsvp)
+      .where(and(eq(rsvp.meetingId, meetingId), eq(rsvp.contactId, c.id))),
   ]);
-  return { contactId: c.id, firstName: c.preferredName || c.firstName, units, alreadyIn: !!existing };
+  return {
+    contactId: c.id,
+    firstName: c.preferredName || c.firstName,
+    units,
+    alreadyIn: !!existing,
+    rsvp: (answer?.response as Response | undefined) ?? null,
+  };
 }
 
 const identifyInput = z.object({
@@ -146,12 +167,12 @@ const identifyInput = z.object({
 });
 
 /** Step one: who is this? Shows only first names and unit labels, and only on a match. */
-export async function identify(token: string, raw: unknown, ip: string, now = new Date()): Promise<IdentifyResult> {
+export async function identify(token: string, raw: unknown, ip: string, now = new Date(), mode: Mode = "check_in"): Promise<IdentifyResult> {
   const parsed = identifyInput.safeParse(raw);
   if (!parsed.success || !looksLikeEmail(parsed.data.email) || !normalizeName(parsed.data.lastName)) {
     return { ok: false, message: "Enter your email and last name." };
   }
-  const g = await gate(token, parsed.data, ip, now);
+  const g = await gate(token, parsed.data, ip, now, mode);
   if (!g.ok) return g;
   const people = await findPeople(parsed.data.email, parsed.data.lastName);
   if (!people.length) return { ok: true, kind: "new" };
@@ -160,10 +181,10 @@ export async function identify(token: string, raw: unknown, ip: string, now = ne
 }
 
 /** Narrows "choose" to the one they picked, checking the pick is one of their matches. */
-export async function pick(token: string, raw: unknown, contactId: string, ip: string, now = new Date()): Promise<IdentifyResult> {
+export async function pick(token: string, raw: unknown, contactId: string, ip: string, now = new Date(), mode: Mode = "check_in"): Promise<IdentifyResult> {
   const parsed = identifyInput.safeParse(raw);
   if (!parsed.success) return { ok: false, message: GENERIC };
-  const g = await gate(token, parsed.data, ip, now);
+  const g = await gate(token, parsed.data, ip, now, mode);
   if (!g.ok) return g;
   const chosen = (await findPeople(parsed.data.email, parsed.data.lastName)).find((p) => p.id === contactId);
   if (!chosen) return { ok: false, message: GENERIC };
@@ -290,9 +311,81 @@ export async function registerNew(token: string, raw: unknown, ip: string, now =
   return { ok: true, message: `You're checked in, ${input.firstName}. Welcome! A volunteer will add you to our list.`, joinUrl: g.meeting.joinUrl };
 }
 
-// ---- Editors: the link and the review list -------------------------------
+// ---- RSVP: before check-in opens -----------------------------------------
 
-const meetingIdSchema = z.uuid();
+const answerInput = identifyInput.extend({ contactId: z.uuid(), response: z.enum(["yes", "no"]) });
+
+async function saveAnswer(meetingId: string, contactId: string, response: Response) {
+  await db
+    .insert(rsvp)
+    .values({ meetingId, contactId, response })
+    .onConflictDoUpdate({ target: [rsvp.meetingId, rsvp.contactId], set: { response, updatedAt: new Date() } });
+  await writeAudit(null, "rsvp", { type: "meeting", id: meetingId }, { contactId, response });
+}
+
+const answered = (name: string, response: Response) =>
+  response === "yes" ? `Thanks, ${name}. See you there!` : `Thanks for letting us know, ${name}. We'll miss you.`;
+
+/** "Coming?" from someone on file. Changing the answer is fine. The join link comes with a yes. */
+export async function answer(token: string, raw: unknown, ip: string, now = new Date()): Promise<Done> {
+  const parsed = answerInput.safeParse(raw);
+  if (!parsed.success) return { ok: false, message: GENERIC };
+  const g = await gate(token, parsed.data, ip, now, "rsvp");
+  if (!g.ok) return g;
+  const person = (await findPeople(parsed.data.email, parsed.data.lastName)).find((p) => p.id === parsed.data.contactId);
+  if (!person) return { ok: false, message: GENERIC };
+  await saveAnswer(g.meeting.id, person.id, parsed.data.response);
+  return {
+    ok: true,
+    message: answered(person.preferredName || person.firstName, parsed.data.response),
+    joinUrl: parsed.data.response === "yes" ? g.meeting.joinUrl : null,
+  };
+}
+
+const answerNewInput = newInput.omit({ adding: true }).extend({ response: z.enum(["yes", "no"]) });
+
+/** An RSVP from someone the roster doesn't have: added for review, like at check-in. */
+export async function answerNew(token: string, raw: unknown, ip: string, now = new Date()): Promise<Done> {
+  const parsed = answerNewInput.safeParse(raw);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? GENERIC };
+  const input = parsed.data;
+  if (!input.adult) return { ok: false, message: "If you're under 18, please check in with the volunteer at the meeting." };
+  if (!looksLikeEmail(input.email)) return { ok: false, message: "Enter your email." };
+  const g = await gate(token, input, ip, now, "rsvp");
+  if (!g.ok) return g;
+  const existing = (await findPeople(input.email, input.lastName)).filter(
+    (p) => normalizeName(p.preferredName || p.firstName) === normalizeName(input.firstName) || normalizeName(p.firstName) === normalizeName(input.firstName),
+  );
+  let contactId = existing.length === 1 ? existing[0].id : null;
+  if (!contactId) {
+    const [created] = await db
+      .insert(contact)
+      .values({ firstName: input.firstName, lastName: input.lastName, email: input.email.trim(), source: "self_check_in", pendingReview: true })
+      .returning({ id: contact.id });
+    contactId = created.id;
+    await db.insert(checkinReview).values({ meetingId: g.meeting.id, contactId, kind: "new_person" });
+    await writeAudit(null, "contact.self_add", { type: "contact", id: contactId }, { meetingId: g.meeting.id, via: "rsvp" });
+  }
+  await saveAnswer(g.meeting.id, contactId, input.response);
+  return { ok: true, message: answered(input.firstName, input.response), joinUrl: input.response === "yes" ? g.meeting.joinUrl : null };
+}
+
+export type RsvpList = { yes: { contactId: string; name: string }[]; no: { contactId: string; name: string }[] };
+
+/** Who said they're coming, and who said they can't, for the meeting page. */
+export async function rsvpsFor(meetingId: string): Promise<RsvpList> {
+  if (!meetingIdSchema.safeParse(meetingId).success) return { yes: [], no: [] };
+  const rows = await db
+    .select({ response: rsvp.response, c: contact })
+    .from(rsvp)
+    .innerJoin(contact, eq(contact.id, rsvp.contactId))
+    .where(eq(rsvp.meetingId, meetingId))
+    .orderBy(asc(contact.lastName), asc(contact.firstName));
+  const list = (r: string) => rows.filter((x) => x.response === r).map((x) => ({ contactId: x.c.id, name: contactName(x.c) }));
+  return { yes: list("yes"), no: list("no") };
+}
+
+// ---- Editors: the link and the review list -------------------------------
 
 /** The meeting's link token, made the first time an editor asks for it. */
 export async function ensureToken(actor: CurrentUser, meetingId: string): Promise<{ ok: true; token: string } | { ok: false; message: string }> {
@@ -433,6 +526,15 @@ export async function mergeReview(actor: CurrentUser, id: string, intoContactId:
         .where(and(eq(attendance.meetingId, a.meetingId), eq(attendance.contactId, into.id)));
       if (clash) await tx.delete(attendance).where(eq(attendance.id, a.id));
       else await tx.update(attendance).set({ contactId: into.id }).where(eq(attendance.id, a.id));
+    }
+    const answers = await tx.select().from(rsvp).where(eq(rsvp.contactId, from.id));
+    for (const a of answers) {
+      const [clash] = await tx
+        .select({ m: rsvp.meetingId })
+        .from(rsvp)
+        .where(and(eq(rsvp.meetingId, a.meetingId), eq(rsvp.contactId, into.id)));
+      if (clash) await tx.delete(rsvp).where(and(eq(rsvp.meetingId, a.meetingId), eq(rsvp.contactId, from.id)));
+      else await tx.update(rsvp).set({ contactId: into.id }).where(and(eq(rsvp.meetingId, a.meetingId), eq(rsvp.contactId, from.id)));
     }
     await tx.update(checkinReview).set({ contactId: into.id }).where(eq(checkinReview.contactId, from.id));
     await tx.update(checkinReview).set(resolved(actor, "merged")).where(eq(checkinReview.id, id));

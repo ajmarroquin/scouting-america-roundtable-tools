@@ -24,7 +24,7 @@ export function ReviewList({ reviews, people }: { reviews: ReviewItem[]; people:
       <CardHeader>
         <CardTitle>To review</CardTitle>
         <CardDescription>
-          From self check-in. New people are checked in but left out of announcements until you approve them; new units count once approved.
+          From self check-in and RSVPs. New people are left out of announcements until you approve them; new units count once approved.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col divide-y">

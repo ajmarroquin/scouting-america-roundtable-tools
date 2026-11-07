@@ -411,3 +411,23 @@ export const publicRateLimit = pgTable("public_rate_limit", {
   windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
   count: integer("count").notNull().default(0),
 });
+
+// "Coming to roundtable?" answers from the public meeting page, one per person per meeting.
+export const rsvp = pgTable(
+  "rsvp",
+  {
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meeting.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contact.id, { onDelete: "cascade" }),
+    response: text("response").notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.meetingId, t.contactId] }),
+    index("rsvp_contact_idx").on(t.contactId),
+    check("rsvp_response_check", sql`${t.response} in ('yes', 'no')`),
+  ],
+);

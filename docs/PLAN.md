@@ -220,7 +220,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
 | 4. Metrics (built) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements (built) | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
-| 6. Meeting page (6A and 6B built) | Self check-in at the door, meeting place and join link, filling announcements from a meeting, RSVP, reminders | M to L | A public page in front of a private roster |
+| 6. Meeting page (6A to 6C built) | Self check-in at the door, meeting place and join link, filling announcements from a meeting, RSVP, reminders | M to L | A public page in front of a private roster |
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
 
@@ -347,7 +347,10 @@ Built as planned (migration 0010, `lib/announcements/meeting-fill.ts`). An empty
 - `meeting.place` (text) and `meeting.join_url` (https only), edited with the other meeting fields and shown on the meeting page. On the public page the join link appears only after someone is matched or RSVPs, so posting the QR code doesn't hand out the Zoom link.
 - In Announcements, a "For meeting" picker of upcoming meetings fills the template's blanks in the text itself, where the sender can still edit them: `[day, date]`, `[date]`, `[time]`, and `[place]` ("on Zoom" for virtual, "at the library or on Zoom" for hybrid), and a button with no address gets the meeting's RSVP link (making the token if needed). The draft warnings then clear on their own.
 
-### 6C. RSVP
+### 6C. RSVP (built)
+
+Built as planned (migration 0011 `rsvp`). The page takes RSVPs from when the link exists until check-in opens, or through the day for a meeting with no time yet. The "Said yes" and "Haven't answered" audiences cover the next two meetings that have a link.
+
 
 - Before the window, the same page asks "Coming to roundtable on Thu, Nov 19 at 7:00 pm?" Email plus last name, then "I'll be there" or "Can't make it". Changing your answer is fine. A new person gets the same form as check-in and lands in review.
 - `rsvp (meeting_id, contact_id, response, updated_at)`, one per person per meeting.
