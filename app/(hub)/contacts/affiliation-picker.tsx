@@ -1,14 +1,12 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -88,44 +86,34 @@ export function AffiliationPicker({
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${idPrefix}-unit`}>Unit</Label>
-        <Select value={value.unit} onValueChange={(unit) => set({ unit, position: "", otherPosition: "" })}>
-          <SelectTrigger id={`${idPrefix}-unit`} className="w-full">
-            <SelectValue placeholder="Pick a unit" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={DISTRICT}>District position (no unit)</SelectItem>
-            <SelectItem value={NEW}>Add a new unit…</SelectItem>
-            {units.length > 0 && <SelectSeparator />}
-            {units.map((u) => (
-              <SelectItem key={u.id} value={u.id}>
-                {u.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Combobox
+          id={`${idPrefix}-unit`}
+          label="Unit"
+          placeholder="Pick a unit"
+          value={value.unit}
+          onChange={(unit) => set({ unit, position: "", otherPosition: "" })}
+          options={[
+            { value: DISTRICT, label: "District position (no unit)" },
+            { value: NEW, label: "Add a new unit…" },
+            ...units.map((u) => ({ value: u.id, label: u.label, group: "Units" })),
+          ]}
+        />
       </div>
 
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${idPrefix}-position`}>Position</Label>
-        <Select value={value.position} onValueChange={(position) => set({ position })} disabled={!value.unit}>
-          <SelectTrigger id={`${idPrefix}-position`} className="w-full">
-            <SelectValue placeholder={value.unit ? "Pick a position" : "Pick a unit first"} />
-          </SelectTrigger>
-          <SelectContent>
-            {groups.map((g) => (
-              <SelectGroup key={g.label}>
-                <SelectLabel>{g.label}</SelectLabel>
-                {g.positions.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ))}
-            <SelectSeparator />
-            <SelectItem value={OTHER}>Other (type it)…</SelectItem>
-          </SelectContent>
-        </Select>
+        <Combobox
+          id={`${idPrefix}-position`}
+          label="Position"
+          placeholder={value.unit ? "Pick a position" : "Pick a unit first"}
+          disabled={!value.unit}
+          value={value.position}
+          onChange={(position) => set({ position })}
+          options={[
+            ...groups.flatMap((g) => g.positions.map((p) => ({ value: p, label: p, group: g.label }))),
+            { value: OTHER, label: "Other (type it)…", group: "Not listed" },
+          ]}
+        />
       </div>
 
       {value.unit === NEW && (

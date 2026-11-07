@@ -21,15 +21,13 @@ import { type ReactNode, useMemo, useRef, useState, useTransition } from "react"
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -72,7 +70,7 @@ export type ReminderInfo = {
 };
 import { WhoIsIn } from "./who-is-in";
 
-type Audience = { key: string; label: string; description: string; count: number; custom: boolean; kind?: "built_in" | "group" | "meeting" };
+type Audience = { key: string; label: string; description: string; count: number; custom: boolean; kind?: "built_in" | "group" | "meeting" | "combined" };
 type Edit = (s: EditorState) => EditorState;
 
 const plural = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
@@ -122,7 +120,24 @@ export function Compose({
   const textarea = useRef<HTMLTextAreaElement>(null);
   // What "For meeting" last put in the subject and preview, so picking another meeting can replace it.
   const autoFilled = useRef({ subject: "", previewText: "" });
-  const picked = audiences.find((a) => a.key === audience);
+  // One list or several ("packs,troops"). Several are counted by "Who's in it", since people overlap.
+  const keys = audience ? audience.split(",") : [];
+  const [combinedCount, setCombinedCount] = useState<{ key: string; count: number } | null>(null);
+  const chosen = keys.map((k) => audiences.find((a) => a.key === k)).filter((a): a is Audience => !!a);
+  const picked: Audience | undefined =
+    chosen.length === 1
+      ? chosen[0]
+      : chosen.length > 1
+        ? {
+            key: audience,
+            label: chosen.map((a) => a.label).join(" + "),
+            description: "Anyone in any of these lists, once each.",
+            count: combinedCount?.key === audience ? combinedCount.count : 0,
+            custom: true,
+            kind: "combined",
+          }
+        : undefined;
+  const counting = chosen.length > 1 && combinedCount?.key !== audience;
   const firstName = (sender.name || "there").split(/\s+/)[0];
   const preview = useMemo(
     () =>
@@ -231,59 +246,23 @@ export function Compose({
         <div className="flex min-w-0 flex-col gap-3">
           <div className="flex flex-col gap-2">
             <Label htmlFor="announce-audience">To</Label>
-            <Select
-              value={audience}
-              onValueChange={(v) => {
-                setAudience(v);
+            <Combobox
+              multiple
+              id="announce-audience"
+              label="Who it goes to"
+              allLabel="Pick who it goes to"
+              value={keys}
+              onChange={(v) => {
+                setAudience(v.slice(0, 6).join(","));
                 setConfirming(false);
               }}
-            >
-              <SelectTrigger id="announce-audience" className="w-full">
-                <SelectValue placeholder="Pick who it goes to" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>From contacts</SelectLabel>
-                  {audiences
-                    .filter((a) => !a.custom)
-                    .map((a) => (
-                      <SelectItem key={a.key} value={a.key}>
-                        {a.label} · {plural(a.count)}
-                      </SelectItem>
-                    ))}
-                </SelectGroup>
-                {audiences.some((a) => a.kind === "meeting") && (
-                  <>
-                    <SelectSeparator />
-                    <SelectGroup>
-                      <SelectLabel>Meetings</SelectLabel>
-                      {audiences
-                        .filter((a) => a.kind === "meeting")
-                        .map((a) => (
-                          <SelectItem key={a.key} value={a.key}>
-                            {a.label} · {plural(a.count)}
-                          </SelectItem>
-                        ))}
-                    </SelectGroup>
-                  </>
-                )}
-                {audiences.some((a) => a.kind === "group") && (
-                  <>
-                    <SelectSeparator />
-                    <SelectGroup>
-                      <SelectLabel>Groups</SelectLabel>
-                      {audiences
-                        .filter((a) => a.kind === "group")
-                        .map((a) => (
-                          <SelectItem key={a.key} value={a.key}>
-                            {a.label} · {plural(a.count)}
-                          </SelectItem>
-                        ))}
-                    </SelectGroup>
-                  </>
-                )}
-              </SelectContent>
-            </Select>
+              options={audiences.map((a) => ({
+                value: a.key,
+                label: `${a.label} · ${plural(a.count)}`,
+                hint: a.description,
+                group: a.kind === "meeting" ? "Meetings" : a.kind === "group" ? "Your groups" : "From contacts",
+              }))}
+            />
             <p className="text-xs text-muted-foreground">
               {picked ? `${picked.description} ` : ""}
               {picked?.kind === "group" ? (
@@ -299,7 +278,13 @@ export function Compose({
                 </>
               )}
             </p>
-            {picked && <WhoIsIn key={picked.key} audienceKey={picked.key} />}
+            {picked && (
+              <WhoIsIn
+                key={picked.key}
+                audienceKey={picked.key}
+                onCount={(count) => chosen.length > 1 && setCombinedCount({ key: picked.key, count })}
+              />
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="announce-subject">Subject</Label>
@@ -419,8 +404,8 @@ export function Compose({
               Send me a test
             </Button>
             {!confirming ? (
-              <Button disabled={pending || !ready || !picked || picked.count === 0} onClick={() => setConfirming(true)}>
-                <SendIcon /> {picked ? `Send to ${plural(picked.count)}` : "Send"}
+              <Button disabled={pending || !ready || !picked || counting || picked.count === 0} onClick={() => setConfirming(true)}>
+                <SendIcon /> {picked && !counting ? `Send to ${plural(picked.count)}` : "Send"}
               </Button>
             ) : (
               <>

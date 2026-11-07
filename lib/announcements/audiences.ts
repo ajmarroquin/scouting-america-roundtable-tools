@@ -17,18 +17,47 @@ import { type LeftOutReason, leftOutReason, type Reach, reach } from "./reach";
 // in the roster (or added by hand), and not unsubscribed. Youth never get one.
 
 export const AUDIENCES = [
-  { key: "everyone", label: "Everyone in contacts", description: "Every adult with an email." },
-  { key: "unit-leaders", label: "Unit leaders", description: "Each unit's top leader, committee chair, and chartered org rep." },
+  {
+    key: "everyone",
+    label: "Everyone in contacts",
+    description: "Every adult in contacts who's still in the roster or was added by hand.",
+  },
+  {
+    key: "unit-leaders",
+    label: "Unit leaders",
+    description:
+      "Each unit's key leaders only: the Cubmaster, Scoutmaster, Crew Advisor, Skipper, Post or Club Advisor, Committee Chair, and Chartered Organization Rep. Not den leaders, assistants, or committee members.",
+  },
   {
     key: "not-reached",
     label: "Units not at roundtable yet this year",
-    description: "The leaders of units nobody has come for this scouting year.",
+    description: "The unit leaders (as above) of units nobody has represented at a roundtable this scouting year.",
   },
-  { key: "packs", label: "Pack leaders", description: "Adults in packs." },
-  { key: "troops", label: "Troop leaders", description: "Adults in troops." },
-  { key: "crews-ships", label: "Crew and ship leaders", description: "Adults in crews, ships, posts, and clubs." },
-  { key: "district", label: "District volunteers", description: "Commissioners, district committee, and merit badge counselors." },
-  { key: "came-this-year", label: "Came to roundtable this year", description: "Anyone checked in at a roundtable this scouting year." },
+  {
+    key: "packs",
+    label: "Pack leaders",
+    description: "Every adult with any role in a pack: Cubmasters, den leaders, assistants, committee, and members.",
+  },
+  {
+    key: "troops",
+    label: "Troop leaders",
+    description: "Every adult with any role in a troop: Scoutmasters, assistants, committee, and members.",
+  },
+  {
+    key: "crews-ships",
+    label: "Crew and ship leaders",
+    description: "Every adult with any role in a crew, ship, post, or club.",
+  },
+  {
+    key: "district",
+    label: "District volunteers",
+    description: "Adults with a district role rather than a unit one: commissioners, district committee, and merit badge counselors.",
+  },
+  {
+    key: "came-this-year",
+    label: "Came to roundtable this year",
+    description: "Anyone checked in at a roundtable this scouting year, whatever their role.",
+  },
 ] as const;
 
 export type AudienceKey = (typeof AUDIENCES)[number]["key"];
@@ -60,13 +89,34 @@ async function rsvpInfo(key: string): Promise<AudienceInfo | null> {
 }
 
 /** A built-in audience or a group's key, by shape. Whether the group still exists is checked when it's used. */
-export function isAudienceKey(key: string): boolean {
+function isSingleKey(key: string): boolean {
   return isAudience(key) || groupIdOf(key) !== null || rsvpOf(key) !== null;
 }
 
-export type AudienceInfo = { key: string; label: string; description: string; custom: boolean; kind?: "built_in" | "group" | "meeting" };
+// Several lists at once, joined by commas: "packs,troops". One email per person, whoever's in more than one.
+const MAX_COMBINED = 6;
+const partsOf = (key: string) => key.split(",");
+
+/** A built-in audience, a group, a meeting's RSVPs, or several of those combined, by shape. */
+export function isAudienceKey(key: string): boolean {
+  const parts = partsOf(key);
+  return parts.length >= 1 && parts.length <= MAX_COMBINED && new Set(parts).size === parts.length && parts.every(isSingleKey);
+}
+
+export type AudienceInfo = { key: string; label: string; description: string; custom: boolean; kind?: "built_in" | "group" | "meeting" | "combined" };
 
 export async function audienceInfo(key: string): Promise<AudienceInfo | null> {
+  const parts = partsOf(key);
+  if (parts.length > 1) {
+    if (!isAudienceKey(key)) return null;
+    const infos = await Promise.all(parts.map(singleInfo));
+    if (infos.some((i) => !i)) return null;
+    return { key, label: infos.map((i) => i!.label).join(" + "), description: "Anyone in any of these lists, once each.", custom: true, kind: "combined" };
+  }
+  return singleInfo(key);
+}
+
+async function singleInfo(key: string): Promise<AudienceInfo | null> {
   const builtIn = AUDIENCES.find((a) => a.key === key);
   if (builtIn) return { ...builtIn, custom: false };
   if (rsvpOf(key)) return rsvpInfo(key);
@@ -77,6 +127,16 @@ export async function audienceInfo(key: string): Promise<AudienceInfo | null> {
 
 /** Contact ids in the audience, before the email and unsubscribe rules. */
 export async function audienceContactIds(key: string): Promise<string[] | "all"> {
+  const parts = partsOf(key);
+  if (parts.length > 1) {
+    if (!isAudienceKey(key)) return [];
+    const each = await Promise.all(parts.map(singleContactIds));
+    return each.includes("all") ? "all" : [...new Set(each.flat() as string[])];
+  }
+  return singleContactIds(key);
+}
+
+async function singleContactIds(key: string): Promise<string[] | "all"> {
   const id = groupIdOf(key);
   if (id) return groupMemberIds(id);
   const r = rsvpOf(key);

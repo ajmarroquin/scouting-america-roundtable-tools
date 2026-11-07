@@ -6,6 +6,7 @@ import { affiliation, attendance, contact, meeting, unit } from "@/lib/db/schema
 import type { ExportAttendance, ExportMeeting } from "./export";
 import { rolesFor } from "@/lib/contacts/roles";
 import { confirmedUnits } from "./confirmed";
+import { savedDetails } from "./schedule";
 import { appTimeZone, appToday } from "./today";
 import { personRecord } from "./trends";
 import { unitsRepresented } from "./units";
@@ -269,4 +270,10 @@ export async function upcomingMeetings(limit = 12): Promise<UpcomingMeeting[]> {
     .where(and(eq(meeting.status, "held"), gte(meeting.date, appToday())))
     .orderBy(asc(meeting.date))
     .limit(limit);
+}
+
+/** Places and join links used before, newest first, to pick again in the meeting form. */
+export async function savedMeetingDetails(): Promise<{ places: string[]; joinUrls: string[] }> {
+  const rows = await db.select({ date: meeting.date, place: meeting.place, joinUrl: meeting.joinUrl }).from(meeting);
+  return savedDetails(rows);
 }

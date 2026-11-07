@@ -31,7 +31,7 @@ async function ContactsData({ searchParams }: { searchParams: PageProps<"/contac
   ]);
   const groupOptions = [
     // "Everyone" is the whole list, so it isn't a filter.
-    ...AUDIENCES.filter((a) => a.key !== "everyone").map((a) => ({ value: a.key, label: a.label, custom: false })),
+    ...AUDIENCES.filter((a) => a.key !== "everyone").map((a) => ({ value: a.key, label: a.label, custom: false, description: a.description })),
     ...groups.map((g) => ({ value: groupKey(g.id), label: g.name, custom: true })),
   ];
   return (

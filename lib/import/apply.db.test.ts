@@ -601,6 +601,16 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(await groups.removeFromGroup(actor, id, [pat.id])).toMatchObject({ message: 'Took 1 out of "Testers".' });
     expect(await groups.groupsOf(pat.id)).toEqual([]);
 
+    // Several lists at once: everyone in any of them, once each.
+    expect(audiences.isAudienceKey(`packs,${key}`)).toBe(true);
+    expect(audiences.isAudienceKey("packs,packs")).toBe(false);
+    expect(audiences.isAudienceKey("packs,nobody")).toBe(false);
+    expect((await audiences.audienceInfo(`packs,${key}`))?.label).toBe("Pack leaders + Testers");
+    const packs = (await audiences.audienceMembers("packs")).map((m) => m.contactId);
+    const both = (await audiences.audienceMembers(`packs,${key}`)).map((m) => m.contactId);
+    expect(new Set(both).size).toBe(both.length);
+    expect(packs.every((c) => both.includes(c))).toBe(true);
+
     expect(await groups.deleteGroup(actor, id)).toMatchObject({ ok: true });
     // The people are still there; only the group is gone.
     expect(await byName("Sam")).toBeDefined();

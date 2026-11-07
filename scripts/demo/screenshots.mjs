@@ -278,8 +278,9 @@ await admin.getByLabel("Footer line", { exact: true }).fill("Sample Council · R
 await admin.getByRole("button", { name: "Save", exact: true }).click();
 await admin.getByText("From Riverbend Roundtable Team").waitFor();
 
-await admin.getByRole("combobox", { name: "To" }).click();
+await admin.getByRole("button", { name: "To", exact: true }).click();
 await admin.getByRole("option", { name: /^Units not at roundtable yet this year/ }).click();
+await admin.keyboard.press("Escape");
 await admin.getByLabel("Subject").fill("We'd love to see your unit at roundtable");
 await admin.getByLabel("Preview text").fill("One leader, one evening a month. Here's what you'd get.");
 await admin
@@ -322,7 +323,7 @@ await guest.getByLabel("Email").fill(leader.email);
 await guest.getByLabel("Last name").fill(leader.last);
 await guest.getByRole("button", { name: "Find me" }).click();
 await guest.getByText(/^Hi /).waitFor();
-await guest.getByRole("combobox", { name: "Unit" }).click();
+await guest.getByRole("button", { name: "Unit", exact: true }).click();
 await guest.getByRole("option").nth(1).click();
 await guest.getByLabel("Your role (optional)").fill("Committee Member");
 await guest.getByRole("button", { name: "Add", exact: true }).click();

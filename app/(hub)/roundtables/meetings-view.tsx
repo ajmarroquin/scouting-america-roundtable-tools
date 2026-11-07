@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/table";
 import { attendanceLong, attendanceMatrix } from "@/lib/attendance/export";
 import type { MeetingRow } from "@/lib/attendance/queries";
-import { isUpcoming, suggestedTimes, timeRange } from "@/lib/attendance/schedule";
+import { isUpcoming, savedDetails, suggestedTimes, timeRange } from "@/lib/attendance/schedule";
 import { meetingDateLabel, scoutingYearOf } from "@/lib/attendance/year";
 import { FORMAT_LABELS } from "@/lib/attendance/labels";
 import { downloadCsv, downloadXlsx } from "@/lib/export/download";
@@ -61,8 +61,20 @@ export function MeetingsView({
   const todays = meetings.find((m) => m.date === today && m.status === "held");
   const [values, setValues] = useState<MeetingValues>(() => {
     const times = suggestedTimes(meetings);
-    const last = [...meetings].filter((m) => m.place).sort((a, b) => b.date.localeCompare(a.date))[0];
-    return { date: today, startTime: times.start, endTime: times.end, title: "", place: last?.place ?? "", joinUrl: "", format: "in_person", status: "held", notes: "" };
+    // Start from the latest meeting's details, so the same room and Zoom link don't get typed every month.
+    const latest = [...meetings].sort((a, b) => b.date.localeCompare(a.date))[0];
+    const saved = savedDetails(meetings);
+    return {
+      date: today,
+      startTime: times.start,
+      endTime: times.end,
+      title: "",
+      place: saved.places[0] ?? "",
+      joinUrl: saved.joinUrls[0] ?? "",
+      format: (latest?.format as MeetingValues["format"]) ?? "in_person",
+      status: "held",
+      notes: "",
+    };
   });
   const held = shown.filter((m) => m.status === "held" && !isUpcoming(m.date, today)).length;
   const upcoming = shown.filter((m) => m.status === "held" && isUpcoming(m.date, today)).length;
@@ -116,7 +128,7 @@ export function MeetingsView({
                 });
               }}
             >
-              <MeetingFields idPrefix="new" values={values} onChange={setValues} today={today} compact />
+              <MeetingFields idPrefix="new" values={values} onChange={setValues} today={today} saved={savedDetails(meetings)} compact />
               <Button type="submit" className="w-fit" disabled={pending}>
                 {pending ? "Adding…" : "Add meeting"}
               </Button>
