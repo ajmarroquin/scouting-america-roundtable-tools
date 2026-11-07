@@ -13,7 +13,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs --now"
+    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs --now",
+    "demo:screenshots": "node scripts/demo/screenshots.mjs"
   },
   "dependencies": {
     "@vercel/functions": "3.10.4",

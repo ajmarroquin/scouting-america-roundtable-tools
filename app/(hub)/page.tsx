@@ -1,4 +1,4 @@
-import { ClipboardCheckIcon, ContactRoundIcon, ShieldCheckIcon, type LucideIcon } from "lucide-react";
+import { ChartColumnIncreasingIcon, ClipboardCheckIcon, ContactRoundIcon, ShieldCheckIcon, TentIcon, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import { visibleTools, type Tool } from "@/lib/tools/registry";
 const ICONS: Record<string, LucideIcon> = {
   contacts: ContactRoundIcon,
   attendance: ClipboardCheckIcon,
+  units: TentIcon,
+  "council-report": ChartColumnIncreasingIcon,
   users: ShieldCheckIcon,
 };
 

@@ -4,7 +4,7 @@ import { UserMenu } from "./user-menu";
 
 export default function HubLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex flex-1 flex-col">
       <header className="border-b">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-4 px-4">
           <Link href="/" className="font-semibold">

@@ -204,7 +204,7 @@ export function CouncilReport({ coverage: c, years, leaders }: { coverage: YearC
                   <TableCell className="text-right tabular-nums">
                     {m.cumulative} <span className="text-xs text-muted-foreground">({percent(m.cumulative, c.total)}%)</span>
                   </TableCell>
-                  <TableCell className="hidden text-sm md:table-cell">{name(m.newUnits)}</TableCell>
+                  <TableCell className="hidden text-sm whitespace-normal md:table-cell">{name(m.newUnits)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
