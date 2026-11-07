@@ -23,6 +23,12 @@ const draftSchema = z.object({
 });
 
 export type AnnouncementDraft = z.input<typeof draftSchema>;
+
+/** Checks a draft the way sending would, for saving or approving one ahead of time. */
+export function checkDraft(raw: unknown): { ok: true; data: z.output<typeof draftSchema> } | { ok: false; message: string } {
+  const parsed = draftSchema.safeParse(raw);
+  return parsed.success ? { ok: true, data: parsed.data } : { ok: false, message: parsed.error.issues[0]?.message ?? "Check the message." };
+}
 export type Result = { ok: boolean; message: string };
 
 function footerFrom(actor: CurrentUser): string {

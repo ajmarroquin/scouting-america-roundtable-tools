@@ -14,6 +14,11 @@ import { senderEmail } from "@/lib/announcements/brand";
 import { getBrand } from "@/lib/announcements/brand-store";
 import { listAnnouncements, unsubscribedCount } from "@/lib/announcements/send";
 import { upcomingMeetings } from "@/lib/attendance/queries";
+import { meetingDateLabel } from "@/lib/attendance/year";
+import { KIND_LABELS } from "@/lib/reminders/rules";
+import { upcomingReminders } from "@/lib/reminders/service";
+import Link from "next/link";
+import { CronWarning } from "./reminders/cron-warning";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { senderAddress } from "@/lib/email/sender";
@@ -54,6 +59,7 @@ async function AnnouncementsData() {
     getBrand(),
     upcomingMeetings(),
   ]);
+  const reminders = await upcomingReminders();
   const fromEmail = senderEmail(senderAddress(process.env));
   return (
     <>
@@ -65,6 +71,45 @@ async function AnnouncementsData() {
         meetings={meetings}
       />
       <Unsubscribes count={unsubscribed} />
+      <section className="flex flex-col gap-2">
+        <h2 className="text-lg font-medium">Reminders</h2>
+        <CronWarning />
+        {reminders.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            None scheduled. Open an upcoming meeting and choose &ldquo;Draft the usual reminders&rdquo; for a week before and the day of.
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Goes out</TableHead>
+                <TableHead>Subject</TableHead>
+                <TableHead className="hidden md:table-cell">For</TableHead>
+                <TableHead className="text-right">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {reminders.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="whitespace-nowrap text-sm">{meetingDateLabel(r.sendOn, "short")}, 9 am</TableCell>
+                  <TableCell className="whitespace-normal">
+                    <Link href={`/announcements/reminders/${r.id}`} className="font-medium underline-offset-4 hover:underline">
+                      {r.subject}
+                    </Link>
+                    <div className="text-xs text-muted-foreground">{KIND_LABELS[r.kind]}</div>
+                  </TableCell>
+                  <TableCell className="hidden text-sm md:table-cell">{meetingDateLabel(r.meetingDate, "short")}</TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant={r.status === "approved" || r.status === "sent" ? "secondary" : r.status === "failed" ? "destructive" : "outline"}>
+                      {r.status === "draft" ? "Needs approval" : r.status === "approved" ? "Approved" : r.status === "sent" ? "Sent" : "Didn't send"}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </section>
       <section className="flex flex-col gap-2">
         <h2 className="text-lg font-medium">Sent</h2>
         {history.length === 0 ? (

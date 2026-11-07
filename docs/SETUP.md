@@ -113,6 +113,16 @@ Announcements use Resend's contacts, segments, and broadcasts, which need a full
 
 Before the first send, open **How emails look** at the bottom of the Announcements page and set the From name people will recognize (your roundtable's name, not "Roundtable Tools"), the header, color, and footer line. A logo needs an https link to an image you host somewhere public. The sending address itself still comes from `EMAIL_FROM` or the Resend domain.
 
+### Reminders
+
+Each meeting can have two reminders, a week before and the day of, that go out at 9 am Eastern once an admin approves them. Vercel runs the job from `vercel.json` (twice a day, at 13:00 and 14:00 UTC, so one run lands at 9 am whether or not it's daylight time; on the free plan each run can fire any time in its hour). To turn it on:
+
+1. Make a long random secret, for example with `openssl rand -hex 32`.
+2. In the Vercel project, add it as `CRON_SECRET` (Production) and redeploy. Vercel sends it to the job, and the job refuses anything without it.
+3. Open an upcoming meeting, choose **Draft the usual reminders**, review each one, and approve it.
+
+Until `CRON_SECRET` is set, the Announcements page says reminders won't send.
+
 Send yourself a test from the Announcements page first, and make the first real send go to a small group that expects it, such as unit leaders.
 
 ## If something breaks

@@ -13,7 +13,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - The repo is public. Never commit real member data, exports, screenshots of real records, or secrets. `tests/fixtures/` holds synthetic data only.
 - Never import youth records. Youth are added by hand, with a parent or guardian email.
 - All database access goes through `lib/db` on the server. Every server action and route handler checks the caller with `requireUser()` or `requireRole()` from `lib/auth/session.ts`.
-- The one exception is the public meeting page (`app/(public)/m/`, `lib/selfcheckin/service.ts`): nobody is signed in there, so each step checks the link's token, the time window, and a rate limit, and re-checks the person by email and last name. Don't add other public actions without the same checks.
+- The one exception is the public meeting page (`app/(public)/m/`, `lib/selfcheckin/service.ts`): nobody is signed in there, so each step checks the link's token, the time window, and a rate limit, and re-checks the person by email and last name. Don't add other public actions without the same checks. The daily job (`app/api/cron/reminders`) has no user either; it checks `CRON_SECRET` and sends only reminders an admin approved.
 - Session reads must sit inside a `<Suspense>` boundary (Cache Components is on).
 - Schema changes: edit `lib/db/schema.ts`, run `npm run db:generate`, commit the SQL in `drizzle/`. Production applies it during the build.
 - Before pushing: `npm run lint && npm run typecheck && npm test && npm run build`. Set `TEST_DATABASE_URL` to a local throwaway Postgres to also run the database tests (`*.db.test.ts`); they drop and rebuild its schema.

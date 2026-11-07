@@ -1,12 +1,14 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { headers } from "next/headers";
 import { NotAllowedError, requireRole } from "@/lib/auth/session";
 import { type AnnouncementDraft, refreshUnsubscribes, sendAnnouncement, sendTestAnnouncement } from "@/lib/announcements/send";
 import { audienceRoster, isAudienceKey, type RosterPerson } from "@/lib/announcements/audiences";
 import { saveBrand } from "@/lib/announcements/brand-store";
 import type { Reach } from "@/lib/announcements/reach";
 import { emailFailureReason } from "@/lib/email/errors";
+import * as reminders from "@/lib/reminders/service";
 import { ensureToken } from "@/lib/selfcheckin/service";
 
 type Result = { ok: boolean; message: string };
@@ -73,4 +75,57 @@ export async function meetingLinkAction(meetingId: string): Promise<{ ok: true; 
     if (error instanceof NotAllowedError) return { ok: false, message: error.message };
     throw error;
   }
+}
+
+// Reminders: drafted ahead, sent at 9 am on their day only once approved.
+
+async function siteOrigin(): Promise<string> {
+  const configured = process.env.BETTER_AUTH_URL?.replace(/\/$/, "");
+  if (configured) return configured;
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  return `${h.get("x-forwarded-proto") ?? "https"}://${host}`;
+}
+
+export async function draftUsualRemindersAction(meetingId: string): Promise<Result> {
+  return asAdmin(async (actor) => {
+    const r = await reminders.draftUsual(actor, String(meetingId), await siteOrigin());
+    if (r.ok) refresh();
+    return r;
+  });
+}
+
+export async function saveReminderAction(id: string, draft: unknown): Promise<Result> {
+  return asAdmin(async (actor) => {
+    const r = await reminders.saveReminder(actor, String(id), draft);
+    if (r.ok) refresh();
+    return r;
+  });
+}
+
+export async function approveReminderAction(id: string, draft: unknown): Promise<Result> {
+  return asAdmin(async (actor) => {
+    // Save what's on screen first, so what's approved is exactly what was reviewed.
+    const saved = await reminders.saveReminder(actor, String(id), draft);
+    if (!saved.ok) return saved;
+    const r = await reminders.approveReminder(actor, String(id));
+    refresh();
+    return r;
+  });
+}
+
+export async function unapproveReminderAction(id: string): Promise<Result> {
+  return asAdmin(async (actor) => {
+    const r = await reminders.unapproveReminder(actor, String(id));
+    if (r.ok) refresh();
+    return r;
+  });
+}
+
+export async function deleteReminderAction(id: string): Promise<Result> {
+  return asAdmin(async (actor) => {
+    const r = await reminders.deleteReminder(actor, String(id));
+    if (r.ok) refresh();
+    return r;
+  });
 }

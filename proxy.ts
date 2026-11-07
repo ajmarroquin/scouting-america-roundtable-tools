@@ -7,6 +7,8 @@ export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname === "/login") return NextResponse.next();
   // The public meeting page (self check-in). It checks its own token, window, and rate limits.
   if (request.nextUrl.pathname.startsWith("/m/")) return NextResponse.next();
+  // The daily reminder job. The route checks CRON_SECRET itself.
+  if (request.nextUrl.pathname.startsWith("/api/cron/")) return NextResponse.next();
   if (!getSessionCookie(request)) {
     return NextResponse.redirect(new URL("/login", request.url));
   }

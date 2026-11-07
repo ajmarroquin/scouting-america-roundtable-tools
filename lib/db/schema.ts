@@ -431,3 +431,38 @@ export const rsvp = pgTable(
     check("rsvp_response_check", sql`${t.response} in ('yes', 'no')`),
   ],
 );
+
+export const REMINDER_KINDS = ["week_before", "day_of"] as const;
+export const REMINDER_STATUSES = ["draft", "approved", "sent", "failed"] as const;
+
+// Announcements written ahead for a meeting, sent at 9 am on their day by the
+// daily job, and only once someone has approved the exact message. Editing an
+// approved reminder makes it a draft again. The send day follows the meeting's
+// date: a week before, or the day of.
+export const reminder = pgTable(
+  "reminder",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meeting.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    audience: text("audience").notNull(),
+    subject: text("subject").notNull(),
+    previewText: text("preview_text"),
+    body: text("body").notNull(),
+    status: text("status").notNull().default("draft"),
+    approvedBy: text("approved_by").references(() => user.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    error: text("error"),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique("reminder_meeting_kind_key").on(t.meetingId, t.kind),
+    check("reminder_kind_check", sql`${t.kind} in ('week_before', 'day_of')`),
+    check("reminder_status_check", sql`${t.status} in ('draft', 'approved', 'sent', 'failed')`),
+  ],
+);

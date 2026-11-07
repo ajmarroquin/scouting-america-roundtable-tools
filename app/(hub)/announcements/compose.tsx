@@ -51,7 +51,25 @@ import { renderAnnouncement } from "@/lib/announcements/render";
 import { fillMeeting } from "@/lib/announcements/meeting-fill";
 import type { UpcomingMeeting } from "@/lib/attendance/queries";
 import { meetingDateLabel } from "@/lib/attendance/year";
-import { meetingLinkAction, refreshUnsubscribesAction, sendAnnouncementAction, sendTestAction } from "./actions";
+import {
+  approveReminderAction,
+  meetingLinkAction,
+  refreshUnsubscribesAction,
+  saveReminderAction,
+  sendAnnouncementAction,
+  sendTestAction,
+  unapproveReminderAction,
+} from "./actions";
+
+export type ReminderInfo = {
+  id: string;
+  kindLabel: string;
+  /** "Thu, Nov 12". */
+  sendLabel: string;
+  status: "draft" | "approved" | "sent" | "failed";
+  approvedByName: string | null;
+  error: string | null;
+};
 import { WhoIsIn } from "./who-is-in";
 
 type Audience = { key: string; label: string; description: string; count: number; custom: boolean; kind?: "built_in" | "group" | "meeting" };
@@ -81,17 +99,23 @@ export function Compose({
   brand,
   fromEmail,
   meetings = [],
+  initial,
+  reminder,
 }: {
   audiences: Audience[];
   sender: { name: string; email: string };
   brand: Brand;
   fromEmail: string | null;
   meetings?: UpcomingMeeting[];
+  /** Start from a saved message (a reminder). */
+  initial?: { audience: string; subject: string; previewText: string; body: string };
+  /** Editing a reminder: save and approve instead of sending now. */
+  reminder?: ReminderInfo;
 }) {
-  const [audience, setAudience] = useState("");
-  const [subject, setSubject] = useState("");
-  const [previewText, setPreviewText] = useState("");
-  const [body, setBody] = useState("");
+  const [audience, setAudience] = useState(initial?.audience ?? "");
+  const [subject, setSubject] = useState(initial?.subject ?? "");
+  const [previewText, setPreviewText] = useState(initial?.previewText ?? "");
+  const [body, setBody] = useState(initial?.body ?? "");
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
   const [confirming, setConfirming] = useState(false);
   const [pending, start] = useTransition();
@@ -192,7 +216,7 @@ export function Compose({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>New announcement</CardTitle>
+        <CardTitle>{reminder ? `Reminder: ${reminder.kindLabel.toLowerCase()} the meeting` : "New announcement"}</CardTitle>
         <CardDescription>
           From {brand.fromName}
           {fromEmail && ` <${fromEmail}>`}. Replies go to {sender.email}.{" "}
@@ -376,6 +400,19 @@ export function Compose({
               </p>
             ))}
           </div>
+          {reminder ? (
+            <ReminderControls
+              reminder={reminder}
+              draft={{ audience, subject, previewText, body }}
+              ready={ready && !!picked}
+              unfinished={warnings.length > 0}
+              audienceLabel={picked?.label}
+              pending={pending}
+              start={start}
+              onTest={test}
+            />
+          ) : (
+          <>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" disabled={pending || !ready} onClick={test}>
               Send me a test
@@ -400,6 +437,8 @@ export function Compose({
               This goes out right away and can&apos;t be called back. People who unsubscribed are left out.
               {warnings.length > 0 && " It still has spots to fill in, flagged above."}
             </p>
+          )}
+          </>
           )}
         </div>
         <div className="flex min-w-0 flex-col gap-2">
@@ -496,6 +535,66 @@ export function Unsubscribes({ count }: { count: number }) {
       >
         <RefreshCwIcon /> Check Resend for new unsubscribes
       </Button>
+    </div>
+  );
+}
+
+/** Save and approve, instead of sending now. Only an approved reminder goes out, at 9 am on its day. */
+function ReminderControls({
+  reminder,
+  draft,
+  ready,
+  unfinished,
+  audienceLabel,
+  pending,
+  start,
+  onTest,
+}: {
+  reminder: ReminderInfo;
+  draft: { audience: string; subject: string; previewText: string; body: string };
+  ready: boolean;
+  unfinished: boolean;
+  audienceLabel?: string;
+  pending: boolean;
+  start: (fn: () => Promise<void>) => void;
+  onTest: () => void;
+}) {
+  const sent = reminder.status === "sent";
+  const run = (action: () => Promise<{ ok: boolean; message: string }>) =>
+    start(async () => {
+      const r = await action();
+      if (r.ok) toast.success(r.message);
+      else toast.error(r.message);
+    });
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm" role="status">
+        {reminder.status === "approved" &&
+          `Approved by ${reminder.approvedByName ?? "an admin"}. It goes out ${reminder.sendLabel} at 9 am${audienceLabel ? ` to ${audienceLabel}` : ""}. Saving a change makes it a draft again.`}
+        {reminder.status === "draft" && `Draft. It won't send unless it's approved. Once approved, it goes out ${reminder.sendLabel} at 9 am.`}
+        {reminder.status === "failed" && <span className="text-destructive">Didn&apos;t send: {reminder.error}</span>}
+        {sent && "Sent."}
+      </p>
+      {!sent && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" disabled={pending || !ready} onClick={onTest}>
+            Send me a test
+          </Button>
+          <Button variant="outline" disabled={pending || !ready} onClick={() => run(() => saveReminderAction(reminder.id, draft))}>
+            Save
+          </Button>
+          {reminder.status === "approved" ? (
+            <Button variant="ghost" disabled={pending} onClick={() => run(() => unapproveReminderAction(reminder.id))}>
+              Undo approval
+            </Button>
+          ) : (
+            <Button disabled={pending || !ready || unfinished} onClick={() => run(() => approveReminderAction(reminder.id, draft))}>
+              Approve to send {reminder.sendLabel}
+            </Button>
+          )}
+        </div>
+      )}
+      {unfinished && !sent && <p className="text-xs text-muted-foreground">Fill in the flagged spots before approving.</p>}
     </div>
   );
 }
