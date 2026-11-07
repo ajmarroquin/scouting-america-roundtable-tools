@@ -107,7 +107,10 @@ for (let i = 0; ; i++) {
 
 // 4. Use it.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const codes = (email) => [...log.matchAll(new RegExp(`to=${email.replace(/\./g, "\\.")} subject="Your sign-in code: (\\d{6})"`, "g"))].map((m) => m[1]);
+// Escape every regex character in the address, not just dots.
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const codes = (email) =>
+  [...log.matchAll(new RegExp(`to=${escapeRegExp(email)} subject="Your sign-in code: (\\d{6})"`, "g"))].map((m) => m[1]);
 mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch();
 
@@ -216,7 +219,7 @@ await phone.waitForLoadState("networkidle");
 const arrivals = world.adults.filter((_, i) => i % 5 === 2).slice(0, 9);
 for (const a of arrivals) {
   await phone.getByLabel("Search people to check in").fill(a.last);
-  await phone.getByRole("button", { name: new RegExp(`${a.last}.*Check in`) }).first().click();
+  await phone.getByRole("button", { name: new RegExp(`${escapeRegExp(a.last)}.*Check in`) }).first().click();
   await sleep(250);
 }
 await phone.getByLabel("Search people to check in").fill("ma");
