@@ -1,10 +1,12 @@
 "use client";
 
-import { DownloadIcon, PlusIcon, SearchIcon, UploadIcon } from "lucide-react";
+import { DownloadIcon, PlusIcon, SearchIcon, UploadIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +39,7 @@ import { STATUS_LABELS, UNIT_TYPE_ORDER } from "@/lib/contacts/format";
 import type { ContactListItem, UnitOption } from "@/lib/contacts/queries";
 import { downloadCsv, downloadXlsx, stamp } from "@/lib/export/download";
 import { CopyEmails } from "./copy-emails";
+import { addToGroupAction, createGroupAction, removeFromGroupAction } from "./groups/actions";
 
 const ALL = "all";
 const DISTRICT = "district";
@@ -48,11 +51,15 @@ type Filters = {
   unit: string;
   position: string;
   email: string;
+  group: string;
 };
 
-const DEFAULTS: Filters = { q: "", status: "active", program: ALL, unit: ALL, position: ALL, email: ALL };
+type GroupOption = { value: string; label: string; custom: boolean };
 
-function matches(c: ContactListItem, f: Filters): boolean {
+const DEFAULTS: Filters = { q: "", status: "active", program: ALL, unit: ALL, position: ALL, email: ALL, group: ALL };
+
+function matches(c: ContactListItem, f: Filters, memberships: Record<string, string[]>): boolean {
+  if (f.group !== ALL && !memberships[c.id]?.includes(f.group)) return false;
   if (f.status !== ALL && c.status !== f.status) return false;
   if (f.email === "with" && !c.email) return false;
   if (f.email === "without" && c.email) return false;
@@ -109,18 +116,41 @@ function FilterSelect({
 export function ContactsTable({
   contacts,
   units,
+  memberships,
+  groupOptions,
+  initialGroup,
   canEdit,
   canImport,
 }: {
   contacts: ContactListItem[];
   units: UnitOption[];
+  memberships: Record<string, string[]>;
+  groupOptions: GroupOption[];
+  initialGroup?: string;
   canEdit: boolean;
   canImport: boolean;
 }) {
-  const [filters, setFilters] = useState<Filters>(DEFAULTS);
+  // A group link shows everyone in the group, whatever their status.
+  const [filters, setFilterState] = useState<Filters>(initialGroup ? { ...DEFAULTS, group: initialGroup, status: ALL } : DEFAULTS);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Picking people is for what's on screen, so a new filter starts a new pick.
+  const setFilters = (next: Filters | ((f: Filters) => Filters)) => {
+    setFilterState(next);
+    setSelected(new Set());
+  };
   const set = (key: keyof Filters) => (value: string) => setFilters((f) => ({ ...f, [key]: value }));
 
-  const filtered = useMemo(() => contacts.filter((c) => matches(c, filters)), [contacts, filters]);
+  const filtered = useMemo(() => contacts.filter((c) => matches(c, filters, memberships)), [contacts, filters, memberships]);
+  const groupNames = useMemo(() => new Map(groupOptions.filter((g) => g.custom).map((g) => [g.value, g.label])), [groupOptions]);
+  const allPicked = filtered.length > 0 && filtered.every((c) => selected.has(c.id));
+  const somePicked = !allPicked && filtered.some((c) => selected.has(c.id));
+  const toggle = (id: string, on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   const programs = useMemo(() => {
     const present = new Set(contacts.flatMap((c) => c.affiliations.map((a) => a.unitType ?? DISTRICT)));
@@ -193,6 +223,11 @@ export function ContactsTable({
             </Link>
           </Button>
         )}
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/contacts/groups">
+            <UsersIcon /> Groups
+          </Link>
+        </Button>
       </div>
 
       <div className="grid gap-2 sm:flex sm:flex-wrap">
@@ -209,6 +244,16 @@ export function ContactsTable({
         <FilterSelect label="Program" value={filters.program} onChange={(v) => setFilters((f) => ({ ...f, program: v, unit: ALL }))} options={programs} />
         <FilterSelect label="Unit" value={filters.unit} onChange={set("unit")} options={unitOptions} />
         <FilterSelect label="Position" value={filters.position} onChange={set("position")} options={positions} />
+        <FilterSelect
+          label="Group"
+          value={filters.group}
+          onChange={set("group")}
+          options={[
+            { value: ALL, label: "Any group" },
+            ...groupOptions.filter((g) => !g.custom),
+            ...groupOptions.filter((g) => g.custom).map((g) => ({ value: g.value, label: `Group: ${g.label}` })),
+          ]}
+        />
         <FilterSelect
           label="Email"
           value={filters.email}
@@ -236,6 +281,15 @@ export function ContactsTable({
           </Button>
         )}
       </div>
+
+      {canEdit && selected.size > 0 && (
+        <GroupBar
+          picked={[...selected]}
+          groups={groupOptions.filter((g) => g.custom)}
+          filteredGroup={groupNames.has(filters.group) ? { key: filters.group, name: groupNames.get(filters.group)! } : null}
+          onDone={() => setSelected(new Set())}
+        />
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <p className="mr-auto text-sm text-muted-foreground" role="status">
@@ -275,6 +329,15 @@ export function ContactsTable({
       <Table>
         <TableHeader>
           <TableRow>
+            {canEdit && (
+              <TableHead className="w-8">
+                <Checkbox
+                  aria-label="Pick everyone shown"
+                  checked={allPicked ? true : somePicked ? "indeterminate" : false}
+                  onCheckedChange={(on) => setSelected(on === true ? new Set(filtered.map((c) => c.id)) : new Set())}
+                />
+              </TableHead>
+            )}
             <TableHead>Name</TableHead>
             <TableHead className="hidden md:table-cell">Email</TableHead>
             <TableHead className="hidden lg:table-cell">Phone</TableHead>
@@ -283,7 +346,12 @@ export function ContactsTable({
         </TableHeader>
         <TableBody>
           {filtered.map((c) => (
-            <TableRow key={c.id}>
+            <TableRow key={c.id} data-state={selected.has(c.id) ? "selected" : undefined}>
+              {canEdit && (
+                <TableCell className="align-top">
+                  <Checkbox aria-label={`Pick ${c.name}`} checked={selected.has(c.id)} onCheckedChange={(on) => toggle(c.id, on === true)} />
+                </TableCell>
+              )}
               <TableCell className="align-top">
                 <Link href={`/contacts/${c.id}`} className="font-medium underline-offset-4 hover:underline">
                   {c.name}
@@ -292,6 +360,13 @@ export function ContactsTable({
                   {c.isYouth && <Badge variant="secondary">Youth</Badge>}
                   {c.status !== "active" && <Badge variant="outline">{STATUS_LABELS[c.status]}</Badge>}
                   {c.unsubscribed && <Badge variant="outline">Unsubscribed</Badge>}
+                  {(memberships[c.id] ?? [])
+                    .filter((k) => groupNames.has(k))
+                    .map((k) => (
+                      <Badge key={k} variant="outline" className="border-dashed">
+                        {groupNames.get(k)}
+                      </Badge>
+                    ))}
                   {c.multipleRegistrations && (
                     <Badge variant="outline" title="Registered in more than one place; the roster lists one">
                       Multiple
@@ -319,6 +394,81 @@ export function ContactsTable({
         </TableBody>
       </Table>
       {filtered.length === 0 && <p className="text-sm text-muted-foreground">No contacts match these filters.</p>}
+    </div>
+  );
+}
+
+const NEW_GROUP = "new";
+const plural = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
+
+/** What to do with the people picked: add them to a group, new or existing, or take them out of the one shown. */
+function GroupBar({
+  picked,
+  groups,
+  filteredGroup,
+  onDone,
+}: {
+  picked: string[];
+  groups: GroupOption[];
+  filteredGroup: { key: string; name: string } | null;
+  onDone: () => void;
+}) {
+  const [target, setTarget] = useState(groups.length ? "" : NEW_GROUP);
+  const [name, setName] = useState("");
+  const [pending, start] = useTransition();
+  const run = (action: () => Promise<{ ok: boolean; message: string }>) =>
+    start(async () => {
+      const result = await action();
+      if (result.ok) {
+        toast.success(result.message);
+        onDone();
+      } else toast.error(result.message);
+    });
+  const idOf = (key: string) => key.replace(/^group:/, "");
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 p-2 text-sm" role="region" aria-label="Picked people">
+      <span className="px-1 font-medium">{plural(picked.length)} picked</span>
+      <Select value={target} onValueChange={setTarget}>
+        <SelectTrigger size="sm" aria-label="Group to add them to" className="min-w-44">
+          <SelectValue placeholder="Add to a group…" />
+        </SelectTrigger>
+        <SelectContent>
+          {groups.map((g) => (
+            <SelectItem key={g.value} value={g.value}>
+              {g.label}
+            </SelectItem>
+          ))}
+          <SelectItem value={NEW_GROUP}>New group…</SelectItem>
+        </SelectContent>
+      </Select>
+      {target === NEW_GROUP && (
+        <Input
+          aria-label="New group name"
+          placeholder="Name the new group"
+          maxLength={60}
+          className="h-7 w-48"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      )}
+      <Button
+        size="sm"
+        disabled={pending || !target || (target === NEW_GROUP && !name.trim())}
+        onClick={() =>
+          run(() => (target === NEW_GROUP ? createGroupAction({ name }, picked) : addToGroupAction(idOf(target), picked)))
+        }
+      >
+        Add
+      </Button>
+      {filteredGroup && (
+        <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => removeFromGroupAction(idOf(filteredGroup.key), picked))}>
+          Take out of {filteredGroup.name}
+        </Button>
+      )}
+      <Button size="sm" variant="ghost" className="ml-auto" disabled={pending} onClick={onDone}>
+        Clear
+      </Button>
     </div>
   );
 }

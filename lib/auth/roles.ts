@@ -12,7 +12,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   viewer: "Can see contacts, units, attendance, and the council report, export lists, and copy emails.",
-  editor: "Can also add and edit contacts and units, set up meetings, and check people in.",
+  editor: "Can also add and edit contacts, units, and groups, set up meetings, and check people in.",
   admin: "Can also manage users, send announcements, load rosters, unit lists, and old sheets, and delete records.",
 };
 

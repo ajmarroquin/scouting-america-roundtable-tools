@@ -16,6 +16,7 @@ import {
   TriangleAlertIcon,
   UserRoundIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { type ReactNode, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,10 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -45,8 +49,9 @@ import {
 } from "@/lib/announcements/editor";
 import { renderAnnouncement } from "@/lib/announcements/render";
 import { refreshUnsubscribesAction, sendAnnouncementAction, sendTestAction } from "./actions";
+import { WhoIsIn } from "./who-is-in";
 
-type Audience = { key: string; label: string; description: string; count: number };
+type Audience = { key: string; label: string; description: string; count: number; custom: boolean };
 type Edit = (s: EditorState) => EditorState;
 
 const plural = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
@@ -183,14 +188,49 @@ export function Compose({
                 <SelectValue placeholder="Pick who it goes to" />
               </SelectTrigger>
               <SelectContent>
-                {audiences.map((a) => (
-                  <SelectItem key={a.key} value={a.key}>
-                    {a.label} · {plural(a.count)}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectLabel>From contacts</SelectLabel>
+                  {audiences
+                    .filter((a) => !a.custom)
+                    .map((a) => (
+                      <SelectItem key={a.key} value={a.key}>
+                        {a.label} · {plural(a.count)}
+                      </SelectItem>
+                    ))}
+                </SelectGroup>
+                {audiences.some((a) => a.custom) && (
+                  <>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel>Groups</SelectLabel>
+                      {audiences
+                        .filter((a) => a.custom)
+                        .map((a) => (
+                          <SelectItem key={a.key} value={a.key}>
+                            {a.label} · {plural(a.count)}
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
+                  </>
+                )}
               </SelectContent>
             </Select>
-            {picked && <p className="text-xs text-muted-foreground">{picked.description}</p>}
+            <p className="text-xs text-muted-foreground">
+              {picked ? `${picked.description} ` : ""}
+              {picked?.custom ? (
+                <Link href={`/contacts?group=${picked.key}`} className="underline underline-offset-2">
+                  Change who&apos;s in it
+                </Link>
+              ) : (
+                <>
+                  <Link href="/contacts/groups" className="underline underline-offset-2">
+                    Make a group
+                  </Link>{" "}
+                  to send to a hand-picked list, like a small test group.
+                </>
+              )}
+            </p>
+            {picked && <WhoIsIn key={picked.key} audienceKey={picked.key} />}
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="announce-subject">Subject</Label>

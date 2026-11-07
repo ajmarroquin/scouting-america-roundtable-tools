@@ -3,7 +3,9 @@
 import { refresh } from "next/cache";
 import { NotAllowedError, requireRole } from "@/lib/auth/session";
 import { type AnnouncementDraft, refreshUnsubscribes, sendAnnouncement, sendTestAnnouncement } from "@/lib/announcements/send";
+import { audienceRoster, isAudienceKey, type RosterPerson } from "@/lib/announcements/audiences";
 import { saveBrand } from "@/lib/announcements/brand-store";
+import type { Reach } from "@/lib/announcements/reach";
 import { emailFailureReason } from "@/lib/email/errors";
 
 type Result = { ok: boolean; message: string };
@@ -47,4 +49,16 @@ export async function saveBrandAction(input: unknown): Promise<Result> {
     if (result.ok) refresh();
     return result;
   });
+}
+
+/** Who an audience reaches and who's left out, for the "who's in it" list. */
+export async function audienceRosterAction(key: string): Promise<{ ok: true; roster: Reach<RosterPerson> } | { ok: false; message: string }> {
+  try {
+    await requireRole("admin");
+  } catch (error) {
+    if (error instanceof NotAllowedError) return { ok: false, message: error.message };
+    throw error;
+  }
+  if (typeof key !== "string" || !isAudienceKey(key)) return { ok: false, message: "Pick who it goes to." };
+  return { ok: true, roster: await audienceRoster(key) };
 }

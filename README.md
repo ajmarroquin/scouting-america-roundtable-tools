@@ -52,9 +52,15 @@ The number council asks for: the share of units with at least one person at a ro
 
 ![The council report: coverage, units still to reach, and a breakdown](docs/screenshots/council-report.png)
 
+### Groups
+
+See which lists each person is on, and build your own. Pick people in contacts and add them to a group, like a small test group or a committee, then filter by it or send an announcement to it. Each contact's page shows the lists they're on and why, and whether they'd get an announcement at all.
+
+![Picking people in contacts and adding them to a new group](docs/screenshots/contacts-groups.png)
+
 ### Announcements
 
-Email a group straight from contacts: everyone, unit leaders, the units you haven't reached this year, or pack, troop, or district people. Start from a template or a blank page, format with a toolbar (headings, lists, links, buttons), and watch an inbox and phone preview update as you type. Emails go out under your district's name, color, and logo through Resend. Every message has an unsubscribe link, replies come to whoever sent it, and anyone who unsubscribes is left out of later announcements and copied email lists.
+Email a group straight from contacts: everyone, unit leaders, the units you haven't reached this year, pack, troop, or district people, or a group you built. "Who's in it" lists exactly who gets it and who's left out and why (no email, unsubscribed, youth, a shared family address). Start from a template or a blank page, format with a toolbar (headings, lists, links, buttons), and watch an inbox and phone preview update as you type. Emails go out under your district's name, color, and logo through Resend. Every message has an unsubscribe link, replies come to whoever sent it, and anyone who unsubscribes is left out of later announcements and copied email lists.
 
 ![Writing an announcement to the units not at roundtable yet](docs/screenshots/announcements.png)
 
