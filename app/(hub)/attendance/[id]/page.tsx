@@ -68,6 +68,17 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
         <div>
           <h1 className="text-2xl font-semibold">{meetingDateLabel(m.date)}</h1>
           {m.startTime && <p className="text-sm text-muted-foreground">{timeRange(m.startTime, m.endTime)}</p>}
+          {(m.place || m.joinUrl) && (
+            <p className="text-sm text-muted-foreground">
+              {m.place}
+              {m.place && m.joinUrl && " · "}
+              {m.joinUrl && (
+                <a href={m.joinUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                  Join link
+                </a>
+              )}
+            </p>
+          )}
           {m.title && <p className="text-muted-foreground">{m.title}</p>}
           <div className="mt-1 flex flex-wrap gap-1">
             <Badge variant={held ? "secondary" : "outline"}>{upcoming ? "Upcoming" : held ? "Held" : "Cancelled"}</Badge>
@@ -121,6 +132,8 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
             date: m.date,
             startTime: hhmm(m.startTime),
             endTime: hhmm(m.endTime),
+            place: m.place ?? "",
+            joinUrl: m.joinUrl ?? "",
             title: m.title ?? "",
             format: m.format as "in_person" | "virtual" | "hybrid",
             status: m.status as "held" | "cancelled",

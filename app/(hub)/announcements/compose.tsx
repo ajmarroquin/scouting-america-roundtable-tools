@@ -48,7 +48,10 @@ import {
   wrap,
 } from "@/lib/announcements/editor";
 import { renderAnnouncement } from "@/lib/announcements/render";
-import { refreshUnsubscribesAction, sendAnnouncementAction, sendTestAction } from "./actions";
+import { fillMeeting } from "@/lib/announcements/meeting-fill";
+import type { UpcomingMeeting } from "@/lib/attendance/queries";
+import { meetingDateLabel } from "@/lib/attendance/year";
+import { meetingLinkAction, refreshUnsubscribesAction, sendAnnouncementAction, sendTestAction } from "./actions";
 import { WhoIsIn } from "./who-is-in";
 
 type Audience = { key: string; label: string; description: string; count: number; custom: boolean };
@@ -77,11 +80,13 @@ export function Compose({
   sender,
   brand,
   fromEmail,
+  meetings = [],
 }: {
   audiences: Audience[];
   sender: { name: string; email: string };
   brand: Brand;
   fromEmail: string | null;
+  meetings?: UpcomingMeeting[];
 }) {
   const [audience, setAudience] = useState("");
   const [subject, setSubject] = useState("");
@@ -136,6 +141,30 @@ export function Compose({
     setBody(t.body);
     if (fromTemplate(subject, "subject")) setSubject(t.subject);
     if (fromTemplate(previewText, "previewText")) setPreviewText(t.previewText);
+  }
+
+  /** Fills the message's blanks from a meeting, starting from the reminder template if it's empty. */
+  function pickMeeting(id: string) {
+    const m = meetings.find((x) => x.id === id);
+    if (!m) return;
+    start(async () => {
+      let token = m.publicToken;
+      if (!token) {
+        const r = await meetingLinkAction(m.id);
+        if (!r.ok) return void toast.error(r.message);
+        token = r.token;
+      }
+      const info = { ...m, link: `${window.location.origin}/m/${token}` };
+      if (!body.trim()) {
+        const t = TEMPLATES.find((x) => x.key === "reminder")!;
+        setBody(fillMeeting(t.body, info));
+        if (fromTemplate(subject, "subject")) setSubject(t.subject);
+        if (fromTemplate(previewText, "previewText")) setPreviewText(t.previewText);
+      } else {
+        apply((s) => ({ value: fillMeeting(s.value, info), start: s.start, end: s.end }));
+      }
+      toast.success(`Filled in from ${meetingDateLabel(m.date)}. The button goes to the meeting's check-in page.`);
+    });
   }
 
   function test() {
@@ -249,6 +278,22 @@ export function Compose({
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <Label htmlFor="announce-body">Message</Label>
+              <div className="flex flex-wrap gap-2">
+              {meetings.length > 0 && (
+                <Select value="" onValueChange={pickMeeting}>
+                  <SelectTrigger size="sm" aria-label="For meeting">
+                    <SelectValue placeholder="For meeting" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {meetings.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {meetingDateLabel(m.date)}
+                        {m.title ? ` · ${m.title}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Select value="" onValueChange={pickTemplate}>
                 <SelectTrigger size="sm" aria-label="Start from a template">
                   <SelectValue placeholder="Start from a template" />
@@ -261,6 +306,7 @@ export function Compose({
                   ))}
                 </SelectContent>
               </Select>
+              </div>
             </div>
             <div className="overflow-hidden rounded-lg border border-input focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
               <div role="toolbar" aria-label="Formatting" aria-controls="announce-body" className="flex flex-wrap gap-0.5 border-b bg-muted/40 p-1">

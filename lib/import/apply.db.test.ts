@@ -755,5 +755,15 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(reset.ok && reset.token !== token).toBe(true);
     expect(await sci.identify(token, who, ip, open)).toMatchObject({ ok: false, message: expect.stringContaining("isn't working") });
     expect(SELF_REPORTED_ROLE).toContain("self-reported");
+
+    // A hybrid meeting's join link is given out only after someone checks in.
+    const newToken = (reset as { token: string }).token;
+    const hybrid = { ...base, date: "2027-01-28", startTime: "19:00", endTime: "20:30", format: "hybrid" as const, place: "St. Mark's Hall" };
+    expect(await att.updateMeeting(actor, meetingId, { ...hybrid, joinUrl: "http://example.org/zoom" })).toMatchObject({ ok: false });
+    expect(await att.updateMeeting(actor, meetingId, { ...hybrid, joinUrl: "https://example.org/zoom" })).toMatchObject({ ok: true });
+    expect((await sci.publicMeeting(newToken, open))?.place).toBe("St. Mark's Hall");
+    const joined = await sci.confirm(newToken, { ...who, contactId: alex.id, representing: [], leaving: [], adding: [] }, ip, open);
+    expect(joined).toMatchObject({ ok: true, joinUrl: "https://example.org/zoom" });
+    expect((await queries.upcomingMeetings()).map((u) => u.date)).not.toContain("2026-11-19");
   });
 });

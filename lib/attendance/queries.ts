@@ -20,6 +20,9 @@ export type MeetingRow = {
   status: string;
   startTime: string | null;
   endTime: string | null;
+  place: string | null;
+  joinUrl: string | null;
+  publicToken: string | null;
   notes: string | null;
   attendees: number;
   units: number;
@@ -223,4 +226,32 @@ export async function contactRecord(contactId: string) {
       .reverse()
       .map((m) => ({ ...m, method: method.get(m.id) ?? "check_in" })),
   };
+}
+
+export type UpcomingMeeting = {
+  id: string;
+  date: string;
+  startTime: string | null;
+  format: string;
+  place: string | null;
+  title: string | null;
+  publicToken: string | null;
+};
+
+/** Held meetings from today on, soonest first, for "For meeting" in announcements. */
+export async function upcomingMeetings(limit = 12): Promise<UpcomingMeeting[]> {
+  return db
+    .select({
+      id: meeting.id,
+      date: meeting.date,
+      startTime: meeting.startTime,
+      format: meeting.format,
+      place: meeting.place,
+      title: meeting.title,
+      publicToken: meeting.publicToken,
+    })
+    .from(meeting)
+    .where(and(eq(meeting.status, "held"), gte(meeting.date, appToday())))
+    .orderBy(asc(meeting.date))
+    .limit(limit);
 }

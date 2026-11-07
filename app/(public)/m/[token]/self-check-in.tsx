@@ -22,7 +22,7 @@ type Step =
   | { kind: "choose"; people: { contactId: string; firstName: string }[] }
   | { kind: "match"; person: Person }
   | { kind: "new" }
-  | { kind: "done"; message: string };
+  | { kind: "done"; message: string; joinUrl?: string | null };
 
 /** "Pack 12", "Pack 12 & Troop 40", "Pack 12, Troop 40 & Crew 7". */
 export function listUnits(labels: string[]): string {
@@ -61,6 +61,13 @@ export function SelfCheckIn({ token, units }: { token: string; units: UnitChoice
       <div className="flex flex-col items-center gap-3 rounded-xl border p-6 text-center" role="status">
         <CheckCircle2Icon className="size-12 text-green-600" aria-hidden />
         <p className="text-lg font-medium">{step.message}</p>
+        {step.joinUrl && (
+          <Button size="lg" asChild>
+            <a href={step.joinUrl} target="_blank" rel="noreferrer">
+              Join the meeting online
+            </a>
+          </Button>
+        )}
       </div>
     );
   }
@@ -119,7 +126,7 @@ export function SelfCheckIn({ token, units }: { token: string; units: UnitChoice
           onSubmit={(choice) =>
             run(async () => {
               const r = await confirmAction(token, { ...who, contactId: step.person.contactId, ...choice });
-              if (r.ok) setStep({ kind: "done", message: r.message });
+              if (r.ok) setStep({ kind: "done", message: r.message, joinUrl: r.joinUrl });
               else setError(r.message);
             })
           }
@@ -135,7 +142,7 @@ export function SelfCheckIn({ token, units }: { token: string; units: UnitChoice
           onSubmit={(input) =>
             run(async () => {
               const r = await registerAction(token, { ...input, website });
-              if (r.ok) setStep({ kind: "done", message: r.message });
+              if (r.ok) setStep({ kind: "done", message: r.message, joinUrl: r.joinUrl });
               else setError(r.message);
             })
           }
