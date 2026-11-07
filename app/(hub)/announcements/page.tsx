@@ -10,9 +10,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AUDIENCES, audienceCounts } from "@/lib/announcements/audiences";
+import { senderEmail } from "@/lib/announcements/brand";
+import { getBrand } from "@/lib/announcements/brand-store";
 import { listAnnouncements, unsubscribedCount } from "@/lib/announcements/send";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
+import { senderAddress } from "@/lib/email/sender";
+import { BrandSettings } from "./brand-settings";
 import { Compose, Unsubscribes } from "./compose";
 
 export const metadata: Metadata = { title: "Announcements" };
@@ -42,12 +46,15 @@ const dateTime = (d: Date) =>
 async function AnnouncementsData() {
   const user = await requireUser();
   if (!hasRole(user.role, "admin")) return <p className="text-sm text-muted-foreground">Only admins can send announcements.</p>;
-  const [counts, history, unsubscribed] = await Promise.all([audienceCounts(), listAnnouncements(), unsubscribedCount()]);
+  const [counts, history, unsubscribed, brand] = await Promise.all([audienceCounts(), listAnnouncements(), unsubscribedCount(), getBrand()]);
+  const fromEmail = senderEmail(senderAddress(process.env));
   return (
     <>
       <Compose
         audiences={AUDIENCES.map((a) => ({ key: a.key, label: a.label, description: a.description, count: counts[a.key] }))}
         sender={{ name: user.name, email: user.email }}
+        brand={brand}
+        fromEmail={fromEmail}
       />
       <Unsubscribes count={unsubscribed} />
       <section className="flex flex-col gap-2">
@@ -88,6 +95,8 @@ async function AnnouncementsData() {
           </Table>
         )}
       </section>
+      {/* Keyed so a save resets the form to what was stored. */}
+      <BrandSettings key={JSON.stringify(brand)} brand={brand} fromEmail={fromEmail} />
     </>
   );
 }

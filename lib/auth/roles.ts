@@ -11,9 +11,9 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
-  viewer: "Can view, export, and copy emails.",
-  editor: "Can also edit contacts and take attendance.",
-  admin: "Can also manage users, run imports, and delete records.",
+  viewer: "Can see contacts, units, attendance, and the council report, export lists, and copy emails.",
+  editor: "Can also add and edit contacts and units, set up meetings, and check people in.",
+  admin: "Can also manage users, send announcements, load rosters, unit lists, and old sheets, and delete records.",
 };
 
 export function isRole(value: unknown): value is Role {

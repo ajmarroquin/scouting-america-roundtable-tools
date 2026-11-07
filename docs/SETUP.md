@@ -111,6 +111,8 @@ GitHub → repo **Settings** → **Code security**: turn on **Secret Protection*
 
 Announcements use Resend's contacts, segments, and broadcasts, which need a full-access API key. If an announcement fails with "the Resend API key can only send email", create a key in Resend with **Full access**, add it to the Vercel project as `RESEND_BROADCAST_API_KEY` (Production), and redeploy. Sign-in codes keep using `RESEND_API_KEY`.
 
+Before the first send, open **How emails look** at the bottom of the Announcements page and set the From name people will recognize (your roundtable's name, not "Roundtable Tools"), the header, color, and footer line. A logo needs an https link to an image you host somewhere public. The sending address itself still comes from `EMAIL_FROM` or the Resend domain.
+
 Send yourself a test from the Announcements page first, and make the first real send go to a small group that expects it, such as unit leaders.
 
 ## If something breaks

@@ -11,7 +11,7 @@ describe("welcomeEmail", () => {
 
   it("says who added them, their role, and how to sign in", () => {
     expect(email.text).toContain("AJ <script> added you");
-    expect(email.text).toContain("You're an Editor: Can also edit contacts");
+    expect(email.text).toContain("You're an Editor: Can also add and edit contacts");
     expect(email.text).toContain("https://rpc.example.com");
     expect(email.text).toContain("adam@example.com");
     expect(email.text).toContain("Reply to this email to reach AJ <script>.");
