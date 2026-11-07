@@ -286,6 +286,12 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
   - **By unit**: roundtables attended and the last one, including units not on the list.
   - **Export**: one Excel workbook (Summary, By roundtable, By unit, Still to reach) or CSVs.
 
+## Demo and screenshots
+
+- `scripts/demo/data.mjs` generates a made-up district, the same every run: 18 units (plus one new on the unit list and one with no members), about 100 adults with positions, youth rows the import skips, last year's sign-in sheet with nicknames, a first name alone, a last initial, and a typo, and a Zoom report with a renamed attendee and a device.
+- `npm run demo:screenshots` wipes a local demo database (`DEMO_DATABASE_URL`, refused unless it's localhost), builds and starts the app, then uses it like a person with Playwright: imports the roster, loads the unit list and the sheet, pastes the Zoom report, checks people in on a phone, and saves `docs/screenshots/*.png` for the README.
+- A public live demo is a later option. It would need its own Vercel project and database, a sign-in that skips email, and a nightly reset, so it waits until someone outside the district asks for it.
+
 ## Open questions
 
 1. Reply-to address for announcements (Phase 5).

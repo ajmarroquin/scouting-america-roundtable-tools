@@ -121,7 +121,7 @@ async function UnitView({
                       {meetingDateLabel(m.date, "short")}
                     </Link>
                   </TableCell>
-                  <TableCell className={m.people.length ? "" : "text-muted-foreground"}>
+                  <TableCell className={`whitespace-normal ${m.people.length ? "" : "text-muted-foreground"}`}>
                     {m.people.length ? m.people.map((p) => p.name).join(", ") : "Nobody"}
                   </TableCell>
                 </TableRow>
@@ -187,7 +187,7 @@ async function UnitView({
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm">{c.positions.join(", ")}</TableCell>
+                  <TableCell className="text-sm whitespace-normal">{c.positions.join(", ")}</TableCell>
                   <TableCell className="hidden text-sm md:table-cell">{c.email}</TableCell>
                 </TableRow>
               ))}

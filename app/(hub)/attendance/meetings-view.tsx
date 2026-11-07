@@ -119,7 +119,7 @@ export function MeetingsView({
 
       <div className="flex flex-wrap items-center gap-2">
         <Select value={year} onValueChange={setYear}>
-          <SelectTrigger aria-label="Scouting year" className="w-40">
+          <SelectTrigger aria-label="Scouting year" className="w-52">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
