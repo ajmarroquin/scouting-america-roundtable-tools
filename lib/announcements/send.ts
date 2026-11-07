@@ -9,6 +9,8 @@ import { emailFailureReason } from "@/lib/email/errors";
 import { senderAddress } from "@/lib/email/sender";
 import { AUDIENCES, audienceMembers, isAudience } from "./audiences";
 import { type BroadcastMailer, getMailer } from "./mailer";
+import { brandFrom } from "./brand";
+import { getBrand } from "./brand-store";
 import { renderAnnouncement } from "./render";
 
 const SEGMENTS_SETTING = "announcements.segments";
@@ -17,6 +19,7 @@ const draftSchema = z.object({
   audience: z.string().refine(isAudience, "Pick who it goes to."),
   subject: z.string().trim().min(1, "Write a subject.").max(150, "Keep the subject under 150 characters."),
   body: z.string().trim().min(1, "Write the message.").max(20000, "That message is too long."),
+  previewText: z.string().trim().max(150, "Keep the preview text under 150 characters.").optional(),
 });
 
 export type AnnouncementDraft = z.input<typeof draftSchema>;
@@ -26,8 +29,9 @@ function footerFrom(actor: CurrentUser): string {
   return `Sent by ${actor.name || actor.email} for the roundtable team`;
 }
 
-function fromAddress(): string {
-  const from = senderAddress(process.env);
+/** The From header: the brand's name with the verified sending address. */
+function fromAddress(brand: Awaited<ReturnType<typeof getBrand>>): string {
+  const from = brandFrom(brand, senderAddress(process.env));
   if (!from) throw new Error("Set EMAIL_FROM, or connect Resend so RESEND_EMAIL_DOMAIN is set");
   return from;
 }
@@ -48,13 +52,16 @@ export async function sendTestAnnouncement(actor: CurrentUser, raw: Omit<Announc
   const parsed = draftSchema.omit({ audience: true }).safeParse(raw);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the message." };
   try {
+    const brand = await getBrand();
     const { html, text } = renderAnnouncement({
       body: parsed.data.body,
+      brand,
+      previewText: parsed.data.previewText,
       footerFrom: footerFrom(actor),
       firstName: (actor.name || "there").split(/\s+/)[0],
       unsubscribeUrl: "#unsubscribe-link-goes-here",
     });
-    await mailer.sendTest({ to: actor.email, from: fromAddress(), replyTo: actor.email, subject: `[Test] ${parsed.data.subject}`, html, text });
+    await mailer.sendTest({ to: actor.email, from: fromAddress(brand), replyTo: actor.email, subject: `[Test] ${parsed.data.subject}`, html, text });
     return { ok: true, message: `Sent a test to ${actor.email}.` };
   } catch (error) {
     return { ok: false, message: `The test didn't send: ${emailFailureReason(error)}.` };
@@ -106,11 +113,12 @@ export async function sendAnnouncement(actor: CurrentUser, raw: AnnouncementDraf
       await db.insert(setting).values({ key: SEGMENTS_SETTING, value }).onConflictDoUpdate({ target: setting.key, set: { value } });
     }
 
-    const { html, text } = renderAnnouncement({ body, footerFrom: footerFrom(actor) });
+    const brand = await getBrand();
+    const { html, text } = renderAnnouncement({ body, brand, previewText: parsed.data.previewText, footerFrom: footerFrom(actor) });
     const broadcastId = await mailer.sendBroadcast({
       segmentId,
       name: `${new Date().toISOString().slice(0, 10)} ${subject}`.slice(0, 200),
-      from: fromAddress(),
+      from: fromAddress(brand),
       replyTo: actor.email,
       subject,
       html,

@@ -139,7 +139,9 @@ async function session(email, viewport) {
 }
 
 async function shot(page, name, full = false) {
-  await page.waitForLoadState("networkidle");
+  // The announcement preview is an iframe that Playwright sometimes never
+  // reports idle after it redraws, though it has rendered. Don't wait forever.
+  await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
   await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
   await sleep(300);
   await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: full });
@@ -253,16 +255,40 @@ await shot(admin, "unit", true);
 await open(admin, "/report?year=2026-27");
 await shot(admin, "council-report", true);
 
-// An announcement to the units nobody has come for yet, ready to send.
+// The district's look for announcements, then one to the units nobody has
+// come for yet, ready to send.
 await open(admin, "/announcements");
+await admin.getByLabel("From name", { exact: true }).fill("Riverbend Roundtable Team");
+await admin.getByLabel("Header", { exact: true }).fill("Riverbend District Roundtable");
+await admin.getByRole("combobox", { name: "Color" }).click();
+await admin.getByRole("option", { name: "Forest green" }).click();
+await admin.getByLabel("Footer line", { exact: true }).fill("Sample Council · Riverbend District");
+await admin.getByRole("button", { name: "Save", exact: true }).click();
+await admin.getByText("From Riverbend Roundtable Team").waitFor();
+
 await admin.getByRole("combobox", { name: "To" }).click();
 await admin.getByRole("option", { name: /^Units not at roundtable yet this year/ }).click();
 await admin.getByLabel("Subject").fill("We'd love to see your unit at roundtable");
+await admin.getByLabel("Preview text").fill("One leader, one evening a month. Here's what you'd get.");
 await admin
   .getByLabel("Message")
   .fill(
-    "Hi {first name},\n\nOur next roundtable is **Thursday, Nov 19 at 7pm** at Riverbend Community Center. It's an hour of program ideas, recharter help, and the chance to meet other leaders.\n\n- Winter camping tips\n- Recharter questions answered\n- Pizza\n\nRSVP or ask anything: just reply to this email.",
+    [
+      "Hi {first name},",
+      "",
+      "Our next roundtable is **Thursday, Nov 19 at 7pm** at Riverbend Community Center. It's an hour of program ideas, recharter help, and the chance to meet other leaders.",
+      "",
+      "## On the agenda",
+      "- Winter camping tips",
+      "- Recharter questions answered",
+      "- Pizza",
+      "",
+      "[button: Let us know you're coming](https://example.org/rsvp)",
+      "",
+      "Questions? Just reply to this email.",
+    ].join("\n"),
   );
+await admin.getByLabel("Message").evaluate((el) => el.setSelectionRange(0, 0));
 await shot(admin, "announcements");
 
 await browser.close();

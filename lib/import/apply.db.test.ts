@@ -475,9 +475,28 @@ describe.skipIf(!local)("import against Postgres", () => {
     const test = await send.sendTestAnnouncement(actor, { subject: "Nov roundtable", body: "Hi {first name}, see you Thursday." }, mailer);
     expect(test.ok).toBe(true);
     expect(calls.tests[0]).toMatchObject({ to: "admin@example.com", subject: "[Test] Nov roundtable", replyTo: "admin@example.com" });
-    expect(calls.tests[0].text.startsWith("Hi Test, see you Thursday.")).toBe(true);
+    expect(calls.tests[0].text).toContain("\n\nHi Test, see you Thursday.\n\n");
+    // Until an admin sets a brand, mail comes from the default name at the verified address.
+    expect(calls.tests[0].from).toBe('"Roundtable Team" <no-reply@example.org>');
 
-    const sent = await send.sendAnnouncement(actor, { audience: "everyone", subject: "Nov roundtable", body: "Hi {first name}, see you Thursday." }, mailer);
+    const brandStore = await import("@/lib/announcements/brand-store");
+    expect(await brandStore.saveBrand(actor, { fromName: 'Bad" <x@y.z>', headerTitle: "", accent: "#1f3a68", logoUrl: "", footerLine: "" })).toMatchObject({ ok: false });
+    expect(
+      await brandStore.saveBrand(actor, {
+        fromName: "GNYC Big Apple Roundtable Team",
+        headerTitle: "Big Apple Roundtable",
+        accent: "#b91c1c",
+        logoUrl: "",
+        footerLine: "Sample Council · Big Apple District",
+      }),
+    ).toMatchObject({ ok: true });
+    expect((await brandStore.getBrand()).accent).toBe("#b91c1c");
+
+    const sent = await send.sendAnnouncement(
+      actor,
+      { audience: "everyone", subject: "Nov roundtable", body: "Hi {first name}, see you Thursday.", previewText: "Popcorn and pizza" },
+      mailer,
+    );
     expect(sent.ok).toBe(true);
     // Alex unsubscribed in Resend: marked here, and left out of the segment.
     const [alex] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
@@ -488,6 +507,10 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(calls.broadcasts[0]).toMatchObject({ segmentId: "seg-1", replyTo: "admin@example.com", subject: "Nov roundtable" });
     expect(calls.broadcasts[0].html).toContain("{{{RESEND_UNSUBSCRIBE_URL}}}");
     expect(calls.broadcasts[0].html).toContain("{{{contact.first_name|there}}}");
+    expect(calls.broadcasts[0].from).toBe('"GNYC Big Apple Roundtable Team" <no-reply@example.org>');
+    expect(calls.broadcasts[0].html).toContain(">Big Apple Roundtable</td>");
+    expect(calls.broadcasts[0].html).toContain("Popcorn and pizza");
+    expect(calls.broadcasts[0].html).toContain("Sample Council · Big Apple District");
 
     // The next send reuses the segment.
     await send.sendAnnouncement(actor, { audience: "everyone", subject: "Reminder", body: "Tomorrow." }, mailer);

@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { NotAllowedError, requireRole } from "@/lib/auth/session";
 import { type AnnouncementDraft, refreshUnsubscribes, sendAnnouncement, sendTestAnnouncement } from "@/lib/announcements/send";
+import { saveBrand } from "@/lib/announcements/brand-store";
 import { emailFailureReason } from "@/lib/email/errors";
 
 type Result = { ok: boolean; message: string };
@@ -37,5 +38,13 @@ export async function refreshUnsubscribesAction(): Promise<Result> {
     } catch (error) {
       return { ok: false, message: `Couldn't check Resend: ${emailFailureReason(error)}.` };
     }
+  });
+}
+
+export async function saveBrandAction(input: unknown): Promise<Result> {
+  return asAdmin(async (actor) => {
+    const result = await saveBrand(actor, input);
+    if (result.ok) refresh();
+    return result;
   });
 }

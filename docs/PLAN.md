@@ -207,7 +207,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 
 - App: `rpc.pack662nyc.com`, a CNAME to Vercel.
 - Email: `mail.pack662nyc.com` is verified in Resend. Its records sit on sub-names of `mail.`, so the pack site and the pack's existing email are unaffected.
-- Sender: "Roundtable Tools" display name, `no-reply@mail.pack662nyc.com` for sign-in codes, and a monitored reply-to for announcements.
+- Sender: "Roundtable Tools" display name, `no-reply@mail.pack662nyc.com` for sign-in codes. Announcements use the From name an admin sets on the Announcements page, at the same address, with replies going to the admin who sent it.
 - If the tools move to a dedicated domain later, it is a DNS change and a Resend re-verify, about an hour.
 
 ## Delivery phases
@@ -300,7 +300,9 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
 
 - **Announcements** (`/announcements`, admins): pick an audience, write a subject and message, preview it, send yourself a test, then confirm and send.
   - **Audiences** (`lib/announcements/audiences.ts`): everyone, unit leaders (top leader, committee chair, chartered org rep), units not at roundtable yet this year, pack, troop, and crew or ship leaders, district volunteers, and people who came this year. Always adults with an email who are still in the roster or were added by hand, one per address, and never anyone unsubscribed.
-  - **Message** (`lib/announcements/render.ts`): plain text with blank lines for paragraphs, "- " lists, links, **bold**, and {first name}. Everything typed is escaped. Every message ends with who sent it and Resend's unsubscribe link.
+  - **Message** (`lib/announcements/render.ts`): plain text with a small syntax: `#` and `##` headings, `-` and `1.` lists, `**bold**`, `_italic_`, links, `[button: Label](https://…)`, `---` dividers, and {first name}. Everything typed is escaped and only http(s) links are linked. It renders as a table-based email that holds up in Outlook and Gmail: a colored header band, a white card, bulletproof buttons, and a footer with who sent it and Resend's unsubscribe link. Optional preview text sits hidden at the top for the inbox line.
+  - **Editor** (`lib/announcements/editor.ts`, `app/(hub)/announcements/compose.tsx`): a toolbar that inserts the syntax at the cursor (Ctrl+B, Ctrl+I, Ctrl+K too, and pasting a link over selected words links them), starter templates, warnings for unfinished links and [bracketed] spots, and a live preview with the inbox line and a phone width.
+  - **Look** (`lib/announcements/brand.ts`, stored as the `announcements.brand` setting): admins set the From name, header, color (preset colors that pass contrast with white text), an optional https logo, and a footer line. The From name is quoted around the verified sending address, so mail can come from "Riverbend Roundtable Team" instead of the tool's name.
   - **Sending** (`lib/announcements/send.ts`): first pick up new unsubscribes from Resend, then make the audience's Resend segment match who's in it now (one contact import plus removing anyone who left), then send a broadcast to it. Replies go to the admin who sent it. Each send, or failure with its reason, is kept in a history table and the audit log.
 - **Unsubscribes**: pulled from Resend before each send and by a "Check Resend" button. The contact gets an Unsubscribed badge and is left out of announcements, copied emails, and the Resend export.
 - **Keys**: contacts, segments, and broadcasts need a full-access Resend key. The Marketplace key may only send email; in that case add a full-access key as `RESEND_BROADCAST_API_KEY` (the app says so if it hits that).

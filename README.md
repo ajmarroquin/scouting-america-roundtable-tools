@@ -54,7 +54,7 @@ The number council asks for: the share of units with at least one person at a ro
 
 ### Announcements
 
-Email a group straight from contacts: everyone, unit leaders, the units you haven't reached this year, or pack, troop, or district people. You see a preview, send yourself a test, and then send through Resend. Every message has an unsubscribe link, replies come to whoever sent it, and anyone who unsubscribes is left out of later announcements and copied email lists.
+Email a group straight from contacts: everyone, unit leaders, the units you haven't reached this year, or pack, troop, or district people. Start from a template or a blank page, format with a toolbar (headings, lists, links, buttons), and watch an inbox and phone preview update as you type. Emails go out under your district's name, color, and logo through Resend. Every message has an unsubscribe link, replies come to whoever sent it, and anyone who unsubscribes is left out of later announcements and copied email lists.
 
 ![Writing an announcement to the units not at roundtable yet](docs/screenshots/announcements.png)
 
