@@ -9,6 +9,7 @@ import { checkInPeople, getMeeting } from "@/lib/attendance/queries";
 import { isUpcoming } from "@/lib/attendance/schedule";
 import { appTimeZone, appToday } from "@/lib/attendance/today";
 import { checkInWindow } from "@/lib/selfcheckin/rules";
+import { rsvpsFor } from "@/lib/selfcheckin/service";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
@@ -54,6 +55,7 @@ async function CheckInView({ params }: { params: PageProps<"/attendance/[id]/che
           units={units.filter((u) => u.active)}
           fromRoster={fromRoster}
           live={!!m.publicToken && checkInWindow(m, new Date(), appTimeZone()).state === "open"}
+          saidYes={(await rsvpsFor(m.id)).yes.map((r) => r.contactId)}
         />
       )}
     </div>

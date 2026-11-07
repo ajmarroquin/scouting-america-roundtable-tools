@@ -6,11 +6,12 @@ import { Suspense } from "react";
 import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { checkInPeople, getMeeting } from "@/lib/attendance/queries";
 import { hhmm, isUpcoming, timeRange } from "@/lib/attendance/schedule";
 import { appTimeZone, appToday } from "@/lib/attendance/today";
 import { checkInWindow, clockIn } from "@/lib/selfcheckin/rules";
-import { openReviews } from "@/lib/selfcheckin/service";
+import { openReviews, rsvpsFor } from "@/lib/selfcheckin/service";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import { FORMAT_LABELS } from "@/lib/attendance/labels";
 import { hasRole } from "@/lib/auth/roles";
@@ -48,7 +49,12 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
   const upcoming = m.status === "held" && isUpcoming(m.date, today);
   // Check-in and the numbers start on the day; until then it's just on the calendar.
   const held = m.status === "held" && !upcoming;
-  const [people, reviews] = canEdit && held ? await Promise.all([checkInPeople(), openReviews(m.id)]) : [[], []];
+  // Upcoming meetings get RSVPs, and new people from them, so they have a review list too.
+  const [people, reviews, rsvps] = await Promise.all([
+    canEdit && m.status === "held" ? checkInPeople() : [],
+    canEdit && m.status === "held" ? openReviews(m.id) : [],
+    m.status === "held" ? rsvpsFor(m.id) : { yes: [], no: [] },
+  ]);
   const tz = appTimeZone();
   const w = checkInWindow(m, new Date(), tz);
   const selfStatus =
@@ -119,6 +125,40 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
       {canEdit && held && <PasteList meetingId={m.id} people={people} />}
 
       {!upcoming && <AttendeesTable attendees={attendees} canEdit={canEdit} meetingId={m.id} />}
+
+      {(rsvps.yes.length > 0 || rsvps.no.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>RSVPs</CardTitle>
+            <CardDescription>
+              {rsvps.yes.length} coming, {rsvps.no.length} can&apos;t make it. From the meeting&apos;s link, before check-in opens.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+            {[
+              { label: "Coming", people: rsvps.yes },
+              { label: "Can't make it", people: rsvps.no },
+            ].map((g) => (
+              <div key={g.label}>
+                <p className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">{g.label}</p>
+                {g.people.length ? (
+                  <ul className="flex flex-col gap-0.5">
+                    {g.people.map((p) => (
+                      <li key={p.contactId}>
+                        <Link href={`/contacts/${p.contactId}`} className="underline-offset-4 hover:underline">
+                          {p.name}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground">Nobody yet.</p>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {canEdit && m.status === "held" && (
         <SelfCheckInCard meetingId={m.id} token={m.publicToken} status={selfStatus} fileName={`roundtable-check-in-${m.date}.png`} />

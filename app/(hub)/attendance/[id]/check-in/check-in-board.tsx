@@ -21,6 +21,7 @@ export function CheckInBoard({
   units,
   fromRoster,
   live = false,
+  saidYes = [],
 }: {
   meetingId: string;
   people: CheckInPerson[];
@@ -29,6 +30,8 @@ export function CheckInBoard({
   fromRoster: string[];
   /** Self check-in is open: refresh now and then so people who check themselves in show up. */
   live?: boolean;
+  /** People who RSVP'd yes, marked so the door goes faster. */
+  saidYes?: string[];
 }) {
   const router = useRouter();
   useEffect(() => {
@@ -111,7 +114,8 @@ export function CheckInBoard({
                 >
                   <span>
                     <span className="block text-base font-medium">{p.name}</span>
-                    <span className="block text-sm text-muted-foreground">{p.units.join(", ") || p.email || "No unit"}</span>
+                    <span className="block text-sm text-muted-foreground">{p.units.join(", ") || p.email || "No unit"}
+                      {saidYes.includes(p.id) && <span className="ml-1 font-medium text-foreground">· said yes</span>}</span>
                   </span>
                   <span className="shrink-0 text-sm font-medium">
                     {checked ? (

@@ -54,7 +54,7 @@ import { meetingDateLabel } from "@/lib/attendance/year";
 import { meetingLinkAction, refreshUnsubscribesAction, sendAnnouncementAction, sendTestAction } from "./actions";
 import { WhoIsIn } from "./who-is-in";
 
-type Audience = { key: string; label: string; description: string; count: number; custom: boolean };
+type Audience = { key: string; label: string; description: string; count: number; custom: boolean; kind?: "built_in" | "group" | "meeting" };
 type Edit = (s: EditorState) => EditorState;
 
 const plural = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
@@ -163,7 +163,7 @@ export function Compose({
       } else {
         apply((s) => ({ value: fillMeeting(s.value, info), start: s.start, end: s.end }));
       }
-      toast.success(`Filled in from ${meetingDateLabel(m.date)}. The button goes to the meeting's check-in page.`);
+      toast.success(`Filled in from ${meetingDateLabel(m.date)}. The button goes to its RSVP and check-in page.`);
     });
   }
 
@@ -227,13 +227,28 @@ export function Compose({
                       </SelectItem>
                     ))}
                 </SelectGroup>
-                {audiences.some((a) => a.custom) && (
+                {audiences.some((a) => a.kind === "meeting") && (
+                  <>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel>Meetings</SelectLabel>
+                      {audiences
+                        .filter((a) => a.kind === "meeting")
+                        .map((a) => (
+                          <SelectItem key={a.key} value={a.key}>
+                            {a.label} · {plural(a.count)}
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
+                  </>
+                )}
+                {audiences.some((a) => a.kind === "group") && (
                   <>
                     <SelectSeparator />
                     <SelectGroup>
                       <SelectLabel>Groups</SelectLabel>
                       {audiences
-                        .filter((a) => a.custom)
+                        .filter((a) => a.kind === "group")
                         .map((a) => (
                           <SelectItem key={a.key} value={a.key}>
                             {a.label} · {plural(a.count)}
@@ -246,7 +261,7 @@ export function Compose({
             </Select>
             <p className="text-xs text-muted-foreground">
               {picked ? `${picked.description} ` : ""}
-              {picked?.custom ? (
+              {picked?.kind === "group" ? (
                 <Link href={`/contacts?group=${picked.key}`} className="underline underline-offset-2">
                   Change who&apos;s in it
                 </Link>

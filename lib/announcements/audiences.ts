@@ -1,13 +1,13 @@
 import "server-only";
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { representation } from "@/lib/attendance/coverage";
 import { coverageForYear } from "@/lib/attendance/metrics";
 import { appTimeZone } from "@/lib/attendance/queries";
-import { scoutingYearOf, todayIn, yearRange } from "@/lib/attendance/year";
+import { meetingDateLabel, scoutingYearOf, todayIn, yearRange } from "@/lib/attendance/year";
 import { OUTREACH_POSITIONS } from "@/lib/contacts/positions";
 import { db } from "@/lib/db";
 import { contactName, unitLabel } from "@/lib/contacts/format";
-import { affiliation, contact, unit } from "@/lib/db/schema";
+import { affiliation, contact, meeting, rsvp, unit } from "@/lib/db/schema";
 import { getGroup, groupMemberIds, groupMembership, groupsOf, listGroups } from "@/lib/groups/store";
 import type { Member } from "./mailer";
 import { type LeftOutReason, leftOutReason, type Reach, reach } from "./reach";
@@ -41,16 +41,34 @@ const GROUP_KEY = /^group:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 export const groupKey = (id: string) => `group:${id}`;
 const groupIdOf = (key: string) => GROUP_KEY.exec(key)?.[1] ?? null;
 
-/** A built-in audience or a group's key, by shape. Whether the group still exists is checked when it's used. */
-export function isAudienceKey(key: string): boolean {
-  return isAudience(key) || groupIdOf(key) !== null;
+// RSVPs for an upcoming meeting: "rsvp-yes:<meeting id>" and "rsvp-none:<meeting id>".
+const RSVP_KEY = /^rsvp-(yes|none):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const rsvpOf = (key: string) => {
+  const m = RSVP_KEY.exec(key);
+  return m ? { answer: m[1] as "yes" | "none", meetingId: m[2] } : null;
+};
+async function rsvpInfo(key: string): Promise<AudienceInfo | null> {
+  const r = rsvpOf(key);
+  if (!r) return null;
+  const [m] = await db.select({ date: meeting.date }).from(meeting).where(eq(meeting.id, r.meetingId));
+  if (!m) return null;
+  const day = meetingDateLabel(m.date, "short");
+  return r.answer === "yes"
+    ? { key, label: `Said yes for ${day}`, description: "People who RSVP'd yes on the meeting's page.", custom: true, kind: "meeting" }
+    : { key, label: `Haven't answered for ${day}`, description: "Everyone in contacts who hasn't RSVP'd for this meeting yet.", custom: true, kind: "meeting" };
 }
 
-export type AudienceInfo = { key: string; label: string; description: string; custom: boolean };
+/** A built-in audience or a group's key, by shape. Whether the group still exists is checked when it's used. */
+export function isAudienceKey(key: string): boolean {
+  return isAudience(key) || groupIdOf(key) !== null || rsvpOf(key) !== null;
+}
+
+export type AudienceInfo = { key: string; label: string; description: string; custom: boolean; kind?: "built_in" | "group" | "meeting" };
 
 export async function audienceInfo(key: string): Promise<AudienceInfo | null> {
   const builtIn = AUDIENCES.find((a) => a.key === key);
   if (builtIn) return { ...builtIn, custom: false };
+  if (rsvpOf(key)) return rsvpInfo(key);
   const id = groupIdOf(key);
   const group = id ? await getGroup(id) : null;
   return group ? { key, label: group.name, description: group.description || "A group built by hand.", custom: true } : null;
@@ -60,6 +78,13 @@ export async function audienceInfo(key: string): Promise<AudienceInfo | null> {
 export async function audienceContactIds(key: string): Promise<string[] | "all"> {
   const id = groupIdOf(key);
   if (id) return groupMemberIds(id);
+  const r = rsvpOf(key);
+  if (r) {
+    const answered = await db.select({ id: rsvp.contactId, response: rsvp.response }).from(rsvp).where(eq(rsvp.meetingId, r.meetingId));
+    if (r.answer === "yes") return answered.filter((a) => a.response === "yes").map((a) => a.id);
+    const skip = new Set(answered.map((a) => a.id));
+    return (await db.select({ id: contact.id }).from(contact)).map((c) => c.id).filter((c) => !skip.has(c));
+  }
   if (!isAudience(key)) return [];
   return builtInContactIds(key);
 }
@@ -177,10 +202,23 @@ export type AudienceOption = AudienceInfo & { count: number };
 
 /** Every audience to pick from, built-in first, with how many it reaches. */
 export async function audienceOptions(): Promise<AudienceOption[]> {
-  const groups = await listGroups();
+  const [groups, upcoming] = await Promise.all([
+    listGroups(),
+    // The next two meetings with a link, so RSVPs are possible.
+    db
+      .select({ id: meeting.id })
+      .from(meeting)
+      .where(and(eq(meeting.status, "held"), gte(meeting.date, todayIn(appTimeZone())), isNotNull(meeting.publicToken)))
+      .orderBy(asc(meeting.date))
+      .limit(2),
+  ]);
+  const meetings = (await Promise.all(upcoming.flatMap((m) => [rsvpInfo(`rsvp-yes:${m.id}`), rsvpInfo(`rsvp-none:${m.id}`)]))).filter(
+    (a): a is AudienceInfo => a !== null,
+  );
   const all: AudienceInfo[] = [
-    ...AUDIENCES.map((a) => ({ ...a, custom: false })),
-    ...groups.map((g) => ({ key: groupKey(g.id), label: g.name, description: g.description || "A group built by hand.", custom: true })),
+    ...AUDIENCES.map((a) => ({ ...a, custom: false, kind: "built_in" as const })),
+    ...groups.map((g) => ({ key: groupKey(g.id), label: g.name, description: g.description || "A group built by hand.", custom: true, kind: "group" as const })),
+    ...meetings,
   ];
   return Promise.all(all.map(async (a) => ({ ...a, count: (await audienceMembers(a.key)).length })));
 }

@@ -6,7 +6,7 @@ import { FORMAT_LABELS } from "@/lib/attendance/labels";
 import { timeRange } from "@/lib/attendance/schedule";
 import { appTimeZone } from "@/lib/attendance/today";
 import { meetingDateLabel } from "@/lib/attendance/year";
-import { clockIn } from "@/lib/selfcheckin/rules";
+import { clockIn, DEFAULT_LENGTH_MINUTES, zonedToUtc } from "@/lib/selfcheckin/rules";
 import { publicMeeting, unitChoices } from "@/lib/selfcheckin/service";
 import { SelfCheckIn } from "./self-check-in";
 
@@ -22,6 +22,14 @@ export default function MeetingPublicPage({ params }: PageProps<"/m/[token]">) {
   );
 }
 
+/** What the "Add to calendar" file needs, when the meeting has a start time. */
+function calendarFor(m: { id: string; date: string; startTime: string | null; endTime: string | null; title: string | null; place: string | null }, tz: string) {
+  if (!m.startTime) return undefined;
+  const start = zonedToUtc(m.date, m.startTime, tz);
+  const end = m.endTime ? zonedToUtc(m.date, m.endTime, tz) : new Date(start.getTime() + DEFAULT_LENGTH_MINUTES * 60000);
+  return { id: m.id, start: start.toISOString(), end: end.toISOString(), title: m.title ? `Roundtable: ${m.title}` : "Roundtable", place: m.place };
+}
+
 async function MeetingPublic({ params }: { params: PageProps<"/m/[token]">["params"] }) {
   await connection();
   const { token } = await params;
@@ -34,7 +42,7 @@ async function MeetingPublic({ params }: { params: PageProps<"/m/[token]">["para
   return (
     <>
       <header className="flex flex-col gap-1">
-        <p className="text-sm font-medium text-muted-foreground">Roundtable check-in</p>
+        <p className="text-sm font-medium text-muted-foreground">{w.state === "open" ? "Roundtable check-in" : "Roundtable"}</p>
         <h1 className="text-2xl font-semibold">{meetingDateLabel(m.date)}</h1>
         {time && <p className="text-lg">{time}</p>}
         {m.title && <p className="text-muted-foreground">{m.title}</p>}
@@ -42,7 +50,15 @@ async function MeetingPublic({ params }: { params: PageProps<"/m/[token]">["para
         {m.format !== "in_person" && <p className="text-sm text-muted-foreground">{FORMAT_LABELS[m.format]}</p>}
       </header>
       {w.state === "open" ? (
-        <SelfCheckIn token={token} units={await unitChoices()} />
+        <SelfCheckIn token={token} units={await unitChoices()} mode="check_in" />
+      ) : m.rsvpOpen ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Coming? Let us know.
+            {w.state === "before" && ` Check-in opens here at ${clockIn(w.opensAt, tz)} on the day.`}
+          </p>
+          <SelfCheckIn token={token} units={[]} mode="rsvp" calendar={calendarFor(m, tz)} />
+        </>
       ) : (
         <p className="rounded-xl border p-4 text-sm" role="status">
           {w.state === "before" && `Check-in opens at ${clockIn(w.opensAt, tz)}, 30 minutes before the start. Come back then.`}

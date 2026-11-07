@@ -674,7 +674,7 @@ describe.skipIf(!local)("import against Postgres", () => {
     const person = (found as { person: import("@/lib/selfcheckin/service").Person }).person;
     expect(person.units.length).toBeGreaterThan(0);
     // Only a first name and unit labels come back.
-    expect(Object.keys(person).sort()).toEqual(["alreadyIn", "contactId", "firstName", "units"]);
+    expect(Object.keys(person).sort()).toEqual(["alreadyIn", "contactId", "firstName", "rsvp", "units"]);
 
     // A family email shared by Pat and Sam: pick by first name.
     const pat = (await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Pat")))[0];
@@ -765,5 +765,70 @@ describe.skipIf(!local)("import against Postgres", () => {
     const joined = await sci.confirm(newToken, { ...who, contactId: alex.id, representing: [], leaving: [], adding: [] }, ip, open);
     expect(joined).toMatchObject({ ok: true, joinUrl: "https://example.org/zoom" });
     expect((await queries.upcomingMeetings()).map((u) => u.date)).not.toContain("2026-11-19");
+  });
+
+  it("takes RSVPs on the meeting page before check-in opens", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const audiences = await import("@/lib/announcements/audiences");
+    const sci = await import("@/lib/selfcheckin/service");
+    const base = { title: "Spring planning", format: "hybrid" as const, status: "held" as const, notes: "", place: "St. Mark's Hall", joinUrl: "https://example.org/zoom" };
+    const made = await att.createMeeting(actor, { ...base, date: "2027-02-18", startTime: "19:00", endTime: "20:30" });
+    const meetingId = made.id!;
+    const token = ((await sci.ensureToken(actor, meetingId)) as { token: string }).token;
+    const before = new Date("2027-02-01T17:00:00Z");
+    const ip = "198.51.100.4";
+
+    const page = await sci.publicMeeting(token, before);
+    expect(page).toMatchObject({ rsvpOpen: true, window: { state: "before" } });
+    const alex = (await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001")))[0];
+    const who = { email: alex.email, lastName: alex.lastName };
+    // Check-in isn't open yet; RSVP is.
+    expect(await sci.identify(token, who, ip, before)).toMatchObject({ ok: false, message: "Check-in isn't open right now." });
+    expect(await sci.identify(token, who, ip, before, "rsvp")).toMatchObject({ kind: "match", person: { rsvp: null } });
+
+    expect(await sci.answer(token, { ...who, contactId: alex.id, response: "yes" }, ip, before)).toMatchObject({
+      ok: true,
+      message: expect.stringContaining("See you there"),
+      joinUrl: "https://example.org/zoom",
+    });
+    expect(await sci.identify(token, who, ip, before, "rsvp")).toMatchObject({ person: { rsvp: "yes" } });
+    expect(await sci.answer(token, { ...who, contactId: alex.id, response: "no" }, ip, before)).toMatchObject({ ok: true, joinUrl: null });
+
+    const sam = (await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Sam")))[0];
+    await sci.answer(token, { email: sam.email, lastName: sam.lastName, contactId: sam.id, response: "yes" }, ip, before);
+
+    // Someone new RSVPs: added for review, left out of announcements until approved.
+    expect(await sci.answerNew(token, { firstName: "Rae", lastName: "Newman", email: "rae@example.org", response: "yes", adult: true }, ip, before)).toMatchObject({ ok: true });
+    const [rae] = await db.select().from(schema.contact).where(eq(schema.contact.email, "rae@example.org"));
+    expect(rae.pendingReview).toBe(true);
+    expect((await sci.openReviews(meetingId)).map((r) => [r.kind, r.name])).toEqual([["new_person", "Rae Newman"]]);
+
+    const list = await sci.rsvpsFor(meetingId);
+    expect(list.yes.map((p) => p.name).sort()).toEqual(["Rae Newman", "Sam Testcase"]);
+    expect(list.no.map((p) => p.contactId)).toEqual([alex.id]);
+
+    // Audiences for the meeting: who said yes (Rae waits for review), and who hasn't answered.
+    const yesKey = `rsvp-yes:${meetingId}`;
+    expect(audiences.isAudienceKey(yesKey)).toBe(true);
+    expect((await audiences.audienceMembers(yesKey)).map((m) => m.contactId)).toEqual([sam.id]);
+    const none = (await audiences.audienceMembers(`rsvp-none:${meetingId}`)).map((m) => m.contactId);
+    expect(none).not.toContain(alex.id);
+    expect(none).not.toContain(sam.id);
+    const options = await audiences.audienceOptions();
+    expect(options.find((o) => o.key === yesKey)).toMatchObject({ label: "Said yes for Feb 18, 2027", kind: "meeting", count: 1 });
+
+    // "It's actually Pat": Rae's RSVP moves to Pat.
+    const pat = (await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Pat")))[0];
+    const raeReview = (await sci.openReviews(meetingId))[0];
+    await sci.mergeReview(actor, raeReview.id, pat.id);
+    expect((await sci.rsvpsFor(meetingId)).yes.map((p) => p.contactId).sort()).toEqual([pat.id, sam.id].sort());
+
+    // Once check-in opens, the page checks people in instead.
+    const during = new Date("2027-02-18T23:45:00Z");
+    expect(await sci.answer(token, { ...who, contactId: alex.id, response: "yes" }, ip, during)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("Check-in is open now"),
+    });
+    expect((await sci.publicMeeting(token, during))?.rsvpOpen).toBe(false);
   });
 });

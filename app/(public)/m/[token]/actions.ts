@@ -1,7 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
-import { confirm, identify, pick, registerNew } from "@/lib/selfcheckin/service";
+import { answer, answerNew, confirm, identify, type Mode, pick, registerNew } from "@/lib/selfcheckin/service";
 
 // The only actions in the app with nobody signed in. Each one goes through
 // lib/selfcheckin/service.ts, which checks the token, the time window, and a
@@ -12,12 +12,22 @@ async function clientIp(): Promise<string> {
   return (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "unknown").trim().slice(0, 64);
 }
 
-export async function identifyAction(token: string, input: unknown) {
-  return identify(String(token), input, await clientIp());
+const mode = (m: unknown): Mode => (m === "rsvp" ? "rsvp" : "check_in");
+
+export async function identifyAction(token: string, input: unknown, m?: Mode) {
+  return identify(String(token), input, await clientIp(), new Date(), mode(m));
 }
 
-export async function pickAction(token: string, input: unknown, contactId: string) {
-  return pick(String(token), input, String(contactId), await clientIp());
+export async function pickAction(token: string, input: unknown, contactId: string, m?: Mode) {
+  return pick(String(token), input, String(contactId), await clientIp(), new Date(), mode(m));
+}
+
+export async function answerAction(token: string, input: unknown) {
+  return answer(String(token), input, await clientIp());
+}
+
+export async function answerNewAction(token: string, input: unknown) {
+  return answerNew(String(token), input, await clientIp());
 }
 
 export async function confirmAction(token: string, input: unknown) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2Icon, PlusIcon, XIcon } from "lucide-react";
+import { CalendarPlusIcon, CheckCircle2Icon, PlusIcon, XIcon } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,8 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Person, UnitChoice } from "@/lib/selfcheckin/service";
-import { confirmAction, identifyAction, pickAction, registerAction } from "./actions";
+import { meetingIcs } from "@/lib/selfcheckin/ics";
+import type { Mode, Person, Response, UnitChoice } from "@/lib/selfcheckin/service";
+import { answerAction, answerNewAction, confirmAction, identifyAction, pickAction, registerAction } from "./actions";
+
+type Calendar = { id: string; start: string; end: string; title: string; place: string | null };
 
 type Claim = { unitId: string; role: string };
 type Step =
@@ -22,7 +25,7 @@ type Step =
   | { kind: "choose"; people: { contactId: string; firstName: string }[] }
   | { kind: "match"; person: Person }
   | { kind: "new" }
-  | { kind: "done"; message: string; joinUrl?: string | null };
+  | { kind: "done"; message: string; joinUrl?: string | null; going?: boolean };
 
 /** "Pack 12", "Pack 12 & Troop 40", "Pack 12, Troop 40 & Crew 7". */
 export function listUnits(labels: string[]): string {
@@ -30,7 +33,7 @@ export function listUnits(labels: string[]): string {
   return `${labels.slice(0, -1).join(", ")} & ${labels.at(-1)}`;
 }
 
-export function SelfCheckIn({ token, units }: { token: string; units: UnitChoice[] }) {
+export function SelfCheckIn({ token, units, mode, calendar }: { token: string; units: UnitChoice[]; mode: Mode; calendar?: Calendar }) {
   const [step, setStep] = useState<Step>({ kind: "find" });
   const [email, setEmail] = useState("");
   const [lastName, setLastName] = useState("");
@@ -61,6 +64,7 @@ export function SelfCheckIn({ token, units }: { token: string; units: UnitChoice
       <div className="flex flex-col items-center gap-3 rounded-xl border p-6 text-center" role="status">
         <CheckCircle2Icon className="size-12 text-green-600" aria-hidden />
         <p className="text-lg font-medium">{step.message}</p>
+        {step.going && calendar && <CalendarButton calendar={calendar} joinUrl={step.joinUrl} />}
         {step.joinUrl && (
           <Button size="lg" asChild>
             <a href={step.joinUrl} target="_blank" rel="noreferrer">
@@ -79,7 +83,7 @@ export function SelfCheckIn({ token, units }: { token: string; units: UnitChoice
           className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            run(async () => onFound(await identifyAction(token, who)));
+            run(async () => onFound(await identifyAction(token, who, mode)));
           }}
         >
           <p className="text-sm text-muted-foreground">Enter the email you use for Scouting and your last name.</p>
@@ -108,7 +112,7 @@ export function SelfCheckIn({ token, units }: { token: string; units: UnitChoice
         <div className="flex flex-col gap-3">
           <p className="font-medium">More than one person uses that email. Which one are you?</p>
           {step.people.map((p) => (
-            <Button key={p.contactId} variant="outline" size="lg" disabled={pending} onClick={() => run(async () => onFound(await pickAction(token, who, p.contactId)))}>
+            <Button key={p.contactId} variant="outline" size="lg" disabled={pending} onClick={() => run(async () => onFound(await pickAction(token, who, p.contactId, mode)))}>
               I&apos;m {p.firstName}
             </Button>
           ))}
@@ -118,7 +122,21 @@ export function SelfCheckIn({ token, units }: { token: string; units: UnitChoice
         </div>
       )}
 
-      {step.kind === "match" && (
+      {step.kind === "match" && mode === "rsvp" && (
+        <RsvpChoice
+          person={step.person}
+          pending={pending}
+          onAnswer={(response) =>
+            run(async () => {
+              const r = await answerAction(token, { ...who, contactId: step.person.contactId, response });
+              if (r.ok) setStep({ kind: "done", message: r.message, joinUrl: r.joinUrl, going: response === "yes" });
+              else setError(r.message);
+            })
+          }
+        />
+      )}
+
+      {step.kind === "match" && mode === "check_in" && (
         <Confirm
           person={step.person}
           units={units}
@@ -138,9 +156,16 @@ export function SelfCheckIn({ token, units }: { token: string; units: UnitChoice
           email={email}
           lastName={lastName}
           units={units}
+          mode={mode}
           pending={pending}
           onSubmit={(input) =>
             run(async () => {
+              if (input.response) {
+                const r = await answerNewAction(token, { ...input, website });
+                if (r.ok) setStep({ kind: "done", message: r.message, joinUrl: r.joinUrl, going: input.response === "yes" });
+                else setError(r.message);
+                return;
+              }
               const r = await registerAction(token, { ...input, website });
               if (r.ok) setStep({ kind: "done", message: r.message, joinUrl: r.joinUrl });
               else setError(r.message);
@@ -299,14 +324,16 @@ function NewPerson({
   email: initialEmail,
   lastName: initialLast,
   units,
+  mode,
   pending,
   onSubmit,
 }: {
   email: string;
   lastName: string;
   units: UnitChoice[];
+  mode: Mode;
   pending: boolean;
-  onSubmit: (input: { firstName: string; lastName: string; email: string; adding: Claim[]; adult: boolean }) => void;
+  onSubmit: (input: { firstName: string; lastName: string; email: string; adding: Claim[]; adult: boolean; response?: Response }) => void;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState(initialLast);
@@ -338,14 +365,72 @@ function NewPerson({
         <Label htmlFor="sci-new-email">Email</Label>
         <Input id="sci-new-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
       </div>
-      <AddUnits units={units} adding={adding} setAdding={setAdding} label={label} />
+      {mode === "check_in" && <AddUnits units={units} adding={adding} setAdding={setAdding} label={label} />}
       <label className="flex items-start gap-2 text-sm">
         <Checkbox className="mt-0.5" checked={adult} onCheckedChange={(on) => setAdult(on === true)} />
         <span>I&apos;m 18 or older. (Under 18? Please check in with the volunteer at the table.)</span>
       </label>
-      <Button type="submit" size="lg" disabled={pending || !adult}>
-        {pending ? "Checking in…" : "Check me in"}
-      </Button>
+      {mode === "check_in" ? (
+        <Button type="submit" size="lg" disabled={pending || !adult}>
+          {pending ? "Checking in…" : "Check me in"}
+        </Button>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" size="lg" disabled={pending || !adult || !firstName.trim()} onClick={() => onSubmit({ firstName, lastName, email, adding: [], adult, response: "yes" })}>
+            I&apos;ll be there
+          </Button>
+          <Button type="button" size="lg" variant="outline" disabled={pending || !adult || !firstName.trim()} onClick={() => onSubmit({ firstName, lastName, email, adding: [], adult, response: "no" })}>
+            Can&apos;t make it
+          </Button>
+        </div>
+      )}
     </form>
+  );
+}
+
+function RsvpChoice({ person, pending, onAnswer }: { person: Person; pending: boolean; onAnswer: (r: Response) => void }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <p className="text-lg font-medium">Hi {person.firstName}. Are you coming?</p>
+        {person.rsvp && (
+          <p className="text-sm text-muted-foreground">
+            You said {person.rsvp === "yes" ? "you're coming" : "you can't make it"}. You can change your answer.
+          </p>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button size="lg" disabled={pending} onClick={() => onAnswer("yes")}>
+          I&apos;ll be there
+        </Button>
+        <Button size="lg" variant="outline" disabled={pending} onClick={() => onAnswer("no")}>
+          Can&apos;t make it
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** An .ics file made here in the browser, with the join link if there is one. */
+function CalendarButton({ calendar, joinUrl }: { calendar: Calendar; joinUrl?: string | null }) {
+  const download = () => {
+    const ics = meetingIcs({
+      id: calendar.id,
+      start: new Date(calendar.start),
+      end: new Date(calendar.end),
+      title: calendar.title,
+      place: calendar.place,
+      url: window.location.href,
+      description: joinUrl ? `Join online: ${joinUrl}` : null,
+    });
+    const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: "roundtable.ics" });
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  return (
+    <Button size="lg" variant="outline" onClick={download}>
+      <CalendarPlusIcon /> Add to calendar
+    </Button>
   );
 }
