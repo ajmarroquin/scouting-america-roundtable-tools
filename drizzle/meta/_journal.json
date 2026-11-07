@@ -43,6 +43,13 @@
       "when": 1793460516754,
       "tag": "0005_unit_list",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794061169351,
+      "tag": "0006_announcements",
+      "breakpoints": true
     }
   ]
 }

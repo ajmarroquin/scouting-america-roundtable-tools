@@ -7,6 +7,9 @@ export function emailFailureReason(error: unknown): string {
   if (/testing emails|verify a domain|domain is not verified/i.test(raw)) {
     return "Resend has no verified sending domain yet, so it only delivers to the Resend account's own address";
   }
+  if (/restricted_api_key|restricted to only send/i.test(raw)) {
+    return "the Resend API key can only send email; add a full-access key as RESEND_BROADCAST_API_KEY";
+  }
   if (/RESEND_API_KEY/.test(raw)) return "the Resend API key isn't set on this deployment";
   if (/EMAIL_FROM|RESEND_EMAIL_DOMAIN/.test(raw)) return "no sender address is set (EMAIL_FROM)";
   if (/rate.?limit|too many requests|daily.*quota|quota/i.test(raw)) {

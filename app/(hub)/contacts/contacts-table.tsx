@@ -291,6 +291,7 @@ export function ContactsTable({
                 <div className="mt-1 flex flex-wrap gap-1">
                   {c.isYouth && <Badge variant="secondary">Youth</Badge>}
                   {c.status !== "active" && <Badge variant="outline">{STATUS_LABELS[c.status]}</Badge>}
+                  {c.unsubscribed && <Badge variant="outline">Unsubscribed</Badge>}
                   {c.multipleRegistrations && (
                     <Badge variant="outline" title="Registered in more than one place; the roster lists one">
                       Multiple

@@ -12,6 +12,12 @@ describe("emailFailureReason", () => {
     );
   });
 
+  it("explains a key that can only send", () => {
+    expect(emailFailureReason(new Error("Resend: restricted_api_key: This API key is restricted to only send emails"))).toMatch(
+      /RESEND_BROADCAST_API_KEY/,
+    );
+  });
+
   it("names missing configuration", () => {
     expect(emailFailureReason(new Error("RESEND_API_KEY is not set"))).toMatch(/API key/);
     expect(emailFailureReason(new Error("Set EMAIL_FROM, or connect Resend so RESEND_EMAIL_DOMAIN is set"))).toMatch(

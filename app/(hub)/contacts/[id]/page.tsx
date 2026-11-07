@@ -58,6 +58,11 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
             <Badge variant="outline">{SOURCE_LABELS[c.source]}</Badge>
             {c.isYouth && <Badge variant="secondary">Youth</Badge>}
             {c.multipleRegistrations && <Badge variant="outline">Multiple registrations</Badge>}
+            {c.unsubscribed && (
+              <Badge variant="outline" title="Unsubscribed from announcements. Left out of announcements and copied emails.">
+                Unsubscribed
+              </Badge>
+            )}
           </div>
         </div>
         {canEdit && (

@@ -35,6 +35,14 @@ describe("collectEmails", () => {
     expect(withoutEmail).toBe(1);
   });
 
+  it("leaves out people who unsubscribed", () => {
+    const result = collectEmails([
+      { email: "a@example.com", isYouth: false, guardianEmail: null },
+      { email: "gone@example.com", isYouth: false, guardianEmail: null, unsubscribed: true },
+    ]);
+    expect(result).toEqual({ emails: ["a@example.com"], withoutEmail: 0, unsubscribed: 1 });
+  });
+
   it("joins with commas or semicolons and splits into batches", () => {
     expect(joinEmails(["a@x.com", "b@x.com"], "semicolon")).toBe("a@x.com; b@x.com");
     expect(joinEmails(["a@x.com", "b@x.com"], "comma")).toBe("a@x.com, b@x.com");

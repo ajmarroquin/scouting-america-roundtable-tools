@@ -44,6 +44,14 @@ export const TOOLS: Tool[] = [
     status: "live",
   },
   {
+    slug: "announcements",
+    name: "Announcements",
+    description: "Email unit leaders, units you haven't reached, or everyone, with an unsubscribe link built in.",
+    href: "/announcements",
+    minRole: "admin",
+    status: "live",
+  },
+  {
     slug: "users",
     name: "Users",
     description: "Who can sign in and what they can do.",

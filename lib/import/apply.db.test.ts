@@ -439,4 +439,72 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(history.record).toMatchObject({ last: "2027-01-21", streak: 1 });
     expect(history.meetings[0].method).toBe("pasted_list");
   });
+
+  it("sends announcements: audiences, unsubscribes pulled back, the segment synced, and failures recorded", async () => {
+    const audiences = await import("@/lib/announcements/audiences");
+    const send = await import("@/lib/announcements/send");
+    process.env.EMAIL_FROM = "Roundtable Tools <no-reply@example.org>";
+    const calls: { sync: { name: string; id: string | null; emails: string[] }[]; broadcasts: Record<string, string>[]; tests: Record<string, string>[] } = {
+      sync: [],
+      broadcasts: [],
+      tests: [],
+    };
+    let failWith: string | null = null;
+    const mailer = {
+      unsubscribedEmails: async () => ["ALEX@example.com"],
+      syncSegment: async (name: string, id: string | null, members: { email: string }[]) => {
+        calls.sync.push({ name, id, emails: members.map((m) => m.email) });
+        return id ?? "seg-1";
+      },
+      sendBroadcast: async (opts: Record<string, string>) => {
+        if (failWith) throw new Error(failWith);
+        calls.broadcasts.push(opts);
+        return "bc-1";
+      },
+      sendTest: async (opts: Record<string, string>) => {
+        calls.tests.push(opts);
+      },
+    };
+
+    const everyoneBefore = (await audiences.audienceMembers("everyone")).map((m) => m.email);
+    expect(everyoneBefore).toContain("alex@example.com");
+    // One email per address: Pat and Sam share a family email.
+    expect(new Set(everyoneBefore.map((e) => e.toLowerCase())).size).toBe(everyoneBefore.length);
+    expect((await audiences.audienceMembers("unit-leaders")).map((m) => m.email)).toContain("alex@example.com");
+
+    const test = await send.sendTestAnnouncement(actor, { subject: "Nov roundtable", body: "Hi {first name}, see you Thursday." }, mailer);
+    expect(test.ok).toBe(true);
+    expect(calls.tests[0]).toMatchObject({ to: "admin@example.com", subject: "[Test] Nov roundtable", replyTo: "admin@example.com" });
+    expect(calls.tests[0].text.startsWith("Hi Test, see you Thursday.")).toBe(true);
+
+    const sent = await send.sendAnnouncement(actor, { audience: "everyone", subject: "Nov roundtable", body: "Hi {first name}, see you Thursday." }, mailer);
+    expect(sent.ok).toBe(true);
+    // Alex unsubscribed in Resend: marked here, and left out of the segment.
+    const [alex] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
+    expect(alex.unsubscribedAt).not.toBeNull();
+    expect(calls.sync[0]).toMatchObject({ name: "Roundtable Tools: Everyone in contacts", id: null });
+    expect(calls.sync[0].emails).not.toContain("alex@example.com");
+    expect(calls.sync[0].emails.length).toBe(everyoneBefore.length - 1);
+    expect(calls.broadcasts[0]).toMatchObject({ segmentId: "seg-1", replyTo: "admin@example.com", subject: "Nov roundtable" });
+    expect(calls.broadcasts[0].html).toContain("{{{RESEND_UNSUBSCRIBE_URL}}}");
+    expect(calls.broadcasts[0].html).toContain("{{{contact.first_name|there}}}");
+
+    // The next send reuses the segment.
+    await send.sendAnnouncement(actor, { audience: "everyone", subject: "Reminder", body: "Tomorrow." }, mailer);
+    expect(calls.sync[1].id).toBe("seg-1");
+
+    failWith = "Resend: restricted_api_key: This API key is restricted to only send emails";
+    const failed = await send.sendAnnouncement(actor, { audience: "unit-leaders", subject: "Leaders", body: "Hello." }, mailer);
+    expect(failed).toMatchObject({ ok: false, message: expect.stringContaining("RESEND_BROADCAST_API_KEY") });
+
+    const history = await send.listAnnouncements();
+    expect(history.map((a) => [a.subject, a.status])).toEqual([
+      ["Leaders", "failed"],
+      ["Reminder", "sent"],
+      ["Nov roundtable", "sent"],
+    ]);
+    expect(history[2]).toMatchObject({ audienceLabel: "Everyone in contacts", recipients: everyoneBefore.length - 1, resendBroadcastId: "bc-1" });
+    expect(await send.unsubscribedCount()).toBe(1);
+    expect(await send.sendAnnouncement(actor, { audience: "nobody", subject: "x", body: "y" }, mailer)).toMatchObject({ ok: false });
+  });
 });

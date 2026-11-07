@@ -185,6 +185,9 @@ export const contact = pgTable(
     isYouth: boolean("is_youth").notNull().default(false),
     guardianEmail: text("guardian_email"),
     notes: text("notes"),
+    // Set when they unsubscribe from announcements (from Resend). Announcements
+    // and copy-emails leave them out from then on.
+    unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
     status: text("status").notNull().default("active"),
     source: text("source").notNull().default("manual"),
     // The export flags people registered in more than one place but lists them once.
@@ -282,5 +285,32 @@ export const attendance = pgTable(
       "attendance_method_check",
       sql`${t.method} in ('check_in', 'walk_in', 'pasted_list', 'legacy_import', 'manual')`,
     ),
+  ],
+);
+
+// Announcements sent through Resend Broadcasts. The message is kept so the team
+// can see what went out; recipients aren't stored, only how many.
+
+export const ANNOUNCEMENT_STATUSES = ["sent", "failed"] as const;
+
+export const announcement = pgTable(
+  "announcement",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    audience: text("audience").notNull(),
+    audienceLabel: text("audience_label").notNull(),
+    recipients: integer("recipients").notNull(),
+    status: text("status").notNull(),
+    error: text("error"),
+    resendBroadcastId: text("resend_broadcast_id"),
+    sentBy: text("sent_by").references(() => user.id, { onDelete: "set null" }),
+    sentByEmail: text("sent_by_email"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("announcement_created_idx").on(t.createdAt),
+    check("announcement_status_check", sql`${t.status} in ('sent', 'failed')`),
   ],
 );

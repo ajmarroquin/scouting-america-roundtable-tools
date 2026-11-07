@@ -14,6 +14,7 @@ export type ExportContact = {
   isYouth: boolean;
   guardianEmail: string | null;
   status: string;
+  unsubscribed?: boolean;
   affiliations: ExportAffiliation[];
 };
 
@@ -62,6 +63,7 @@ export function resendExportRows(contacts: ExportContact[]): Cell[][] {
   const seen = new Set<string>();
   const rows: Cell[][] = [];
   for (const c of contacts) {
+    if (c.unsubscribed) continue;
     for (const email of [c.email, c.isYouth ? c.guardianEmail : null]) {
       if (!email || seen.has(email)) continue;
       seen.add(email);
