@@ -644,4 +644,116 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(await att.updateMeeting(actor, made.id!, { ...base, date: "2027-03-04", startTime: "", endTime: "" })).toMatchObject({ ok: true });
     vi.setSystemTime(new Date("2027-02-01T17:00:00Z"));
   });
+
+  it("runs self check-in: the link, the window, matching by email and last name, claims for review, and coverage", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const queries = await import("@/lib/attendance/queries");
+    const audiences = await import("@/lib/announcements/audiences");
+    const sci = await import("@/lib/selfcheckin/service");
+    const { SELF_REPORTED_ROLE } = await import("@/lib/selfcheckin/rules");
+    const base = { title: "", format: "in_person" as const, status: "held" as const, notes: "" };
+    const made = await att.createMeeting(actor, { ...base, date: "2027-01-28", startTime: "19:00", endTime: "20:30" });
+    const meetingId = made.id!;
+    const open = new Date("2027-01-28T23:45:00Z"); // 6:45 pm in New York
+    const ip = "203.0.113.7";
+
+    const t1 = await sci.ensureToken(actor, meetingId);
+    expect(t1.ok).toBe(true);
+    const token = (t1 as { token: string }).token;
+    expect(await sci.ensureToken(actor, meetingId)).toEqual({ ok: true, token });
+
+    const alex = (await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001")))[0];
+    const who = { email: alex.email!.toUpperCase(), lastName: ` ${alex.lastName.toLowerCase()} ` };
+    expect(await sci.identify(token, who, ip, new Date("2027-01-28T12:00:00Z"))).toMatchObject({ ok: false, message: "Check-in isn't open right now." });
+    expect(await sci.identify("not-a-real-token-at-all", who, ip, open)).toMatchObject({ ok: false, message: expect.stringContaining("isn't working") });
+    expect(await sci.identify(token, { ...who, website: "spam" }, ip, open)).toMatchObject({ ok: false });
+    expect(await sci.identify(token, { email: alex.email, lastName: "Wrong" }, ip, open)).toEqual({ ok: true, kind: "new" });
+
+    const found = await sci.identify(token, who, ip, open);
+    expect(found).toMatchObject({ ok: true, kind: "match", person: { contactId: alex.id, alreadyIn: false } });
+    const person = (found as { person: import("@/lib/selfcheckin/service").Person }).person;
+    expect(person.units.length).toBeGreaterThan(0);
+    // Only a first name and unit labels come back.
+    expect(Object.keys(person).sort()).toEqual(["alreadyIn", "contactId", "firstName", "units"]);
+
+    // A family email shared by Pat and Sam: pick by first name.
+    const pat = (await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Pat")))[0];
+    const choose = await sci.identify(token, { email: pat.email, lastName: pat.lastName }, ip, open);
+    expect(choose).toMatchObject({ ok: true, kind: "choose" });
+    expect((choose as { people: { firstName: string }[] }).people.map((p) => p.firstName).sort()).toEqual(["Pat", "Sam"]);
+    const sam = (choose as { people: { contactId: string; firstName: string }[] }).people.find((p) => p.firstName === "Sam")!;
+    expect(await sci.pick(token, { email: pat.email, lastName: pat.lastName }, sam.contactId, ip, open)).toMatchObject({ kind: "match" });
+    expect(await sci.pick(token, { email: pat.email, lastName: pat.lastName }, alex.id, ip, open)).toMatchObject({ ok: false });
+
+    // Youth are never matched, even with their own email.
+    const kid = { email: "kid@example.com", lastName: "Testcase" };
+    expect(await sci.identify(token, kid, ip, open)).toEqual({ ok: true, kind: "new" });
+
+    // Alex represents one of their units tonight and claims another.
+    const units = await sci.unitChoices();
+    const mine = person.units[0];
+    const other = units.find((u) => !person.units.some((p) => p.id === u.id))!;
+    const done = await sci.confirm(token, { ...who, contactId: alex.id, representing: [mine.id], leaving: [], adding: [{ unitId: other.id, role: "Den Leader" }] }, ip, open);
+    expect(done).toMatchObject({ ok: true, message: expect.stringContaining("A volunteer will update your units") });
+    let m = await queries.getMeeting(meetingId);
+    expect(m!.unitsRepresented.map((u) => u.id)).toEqual([mine.id]);
+    expect(m!.attendees[0]).toMatchObject({ method: "self_check_in", confirmedUnitIds: [mine.id] });
+
+    let reviews = await sci.openReviews(meetingId);
+    expect(reviews.map((r) => [r.kind, r.unitLabel, r.role])).toEqual([["add_unit", other.label, "Den Leader"]]);
+    expect(await sci.approveReview(actor, reviews[0].id)).toMatchObject({ ok: true });
+    expect(await sci.approveReview(actor, reviews[0].id)).toMatchObject({ ok: false });
+    m = await queries.getMeeting(meetingId);
+    expect(m!.unitsRepresented.map((u) => u.id).sort()).toEqual([mine.id, other.id].sort());
+    const [aff] = await db.select().from(schema.affiliation).where(and(eq(schema.affiliation.contactId, alex.id), eq(schema.affiliation.unitId, other.id)));
+    expect(aff).toMatchObject({ position: "Den Leader", source: "manual" });
+
+    // Confirming again replaces it: unticking everything means no unit tonight.
+    await sci.confirm(token, { ...who, contactId: alex.id, representing: [], leaving: [mine.id], adding: [] }, ip, open);
+    m = await queries.getMeeting(meetingId);
+    expect(m!.unitsRepresented).toEqual([]);
+    reviews = await sci.openReviews(meetingId);
+    expect(reviews).toMatchObject([{ kind: "remove_unit", unitLabel: mine.label, fromRoster: true }]);
+    // A roster unit stays until the next import says otherwise.
+    await sci.approveReview(actor, reviews[0].id);
+    expect(
+      (await db.select().from(schema.affiliation).where(and(eq(schema.affiliation.contactId, alex.id), eq(schema.affiliation.unitId, mine.id)))).length,
+    ).toBeGreaterThan(0);
+
+    // Someone new: checked in, left out of announcements until approved.
+    expect(await sci.registerNew(token, { firstName: "Young", lastName: "Person", email: "young@example.org", adding: [], adult: false }, ip, open)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("under 18"),
+    });
+    const fresh = await sci.registerNew(token, { firstName: "Nia", lastName: "Newcomer", email: "nia@example.org", adding: [{ unitId: other.id }], adult: true }, ip, open);
+    expect(fresh).toMatchObject({ ok: true, message: expect.stringContaining("Welcome") });
+    const [nia] = await db.select().from(schema.contact).where(eq(schema.contact.email, "nia@example.org"));
+    expect(nia).toMatchObject({ pendingReview: true, source: "self_check_in" });
+    expect((await audiences.audienceMembers("everyone")).map((p) => p.email)).not.toContain("nia@example.org");
+    expect((await audiences.audienceRoster("everyone")).leftOut.find((p) => p.contactId === nia.id)?.reason).toBe("pending_review");
+    // Trying again with the same details checks in the same person, not a second one.
+    await sci.registerNew(token, { firstName: "Nia", lastName: "Newcomer", email: "nia@example.org", adding: [], adult: true }, ip, open);
+    expect((await db.select().from(schema.contact).where(eq(schema.contact.email, "nia@example.org"))).length).toBe(1);
+
+    reviews = await sci.openReviews(meetingId);
+    const niaNew = reviews.find((r) => r.kind === "new_person" && r.contactId === nia.id)!;
+    // "It's actually Pat": the check-in moves, Pat gains a second email, the duplicate goes.
+    expect(await sci.mergeReview(actor, niaNew.id, pat.id)).toMatchObject({ ok: true, message: expect.stringContaining("Pat") });
+    expect((await db.select().from(schema.contact).where(eq(schema.contact.id, nia.id))).length).toBe(0);
+    expect((await db.select().from(schema.contact).where(eq(schema.contact.id, pat.id)))[0].altEmail).toBe("nia@example.org");
+    expect((await queries.getMeeting(meetingId))!.attendees.map((a) => a.contactId)).toContain(pat.id);
+
+    // Rejecting someone new removes them and their check-in.
+    await sci.registerNew(token, { firstName: "Not", lastName: "Real", email: "fake@example.org", adding: [], adult: true }, ip, open);
+    const fake = (await sci.openReviews(meetingId)).find((r) => r.kind === "new_person")!;
+    expect(await sci.rejectReview(actor, fake.id)).toMatchObject({ ok: true });
+    expect((await db.select().from(schema.contact).where(eq(schema.contact.email, "fake@example.org"))).length).toBe(0);
+
+    // Rate limits, and a reset link stops the old one.
+    expect([await sci.allow("test:limit", 2, 600), await sci.allow("test:limit", 2, 600), await sci.allow("test:limit", 2, 600)]).toEqual([true, true, false]);
+    const reset = await sci.resetToken(actor, meetingId);
+    expect(reset.ok && reset.token !== token).toBe(true);
+    expect(await sci.identify(token, who, ip, open)).toMatchObject({ ok: false, message: expect.stringContaining("isn't working") });
+    expect(SELF_REPORTED_ROLE).toContain("self-reported");
+  });
 });

@@ -119,6 +119,7 @@ export type RosterPerson = {
   isYouth: boolean;
   status: string;
   unsubscribed: boolean;
+  pendingReview: boolean;
 };
 
 async function candidates(ids: string[] | "all"): Promise<RosterPerson[]> {
@@ -133,6 +134,7 @@ async function candidates(ids: string[] | "all"): Promise<RosterPerson[]> {
       isYouth: contact.isYouth,
       status: contact.status,
       unsubscribedAt: contact.unsubscribedAt,
+      pendingReview: contact.pendingReview,
     })
     .from(contact)
     .where(ids === "all" ? undefined : inArray(contact.id, ids));
@@ -145,6 +147,7 @@ async function candidates(ids: string[] | "all"): Promise<RosterPerson[]> {
     isYouth: r.isYouth,
     status: r.status,
     unsubscribed: r.unsubscribedAt !== null,
+    pendingReview: r.pendingReview,
   }));
 }
 

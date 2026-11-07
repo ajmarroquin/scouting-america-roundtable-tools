@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { affiliation, attendance, meeting } from "@/lib/db/schema";
+import { confirmedUnits } from "./confirmed";
 import { appToday } from "./today";
 import { unitsRepresented } from "./units";
 import { scoutingYearOf } from "./year";
@@ -10,7 +11,7 @@ import { scoutingYearOf } from "./year";
 // page and the coverage metrics both read this, so they always agree.
 
 export type HeldMeeting = { id: string; date: string; title: string | null };
-export type CheckInRow = { meetingId: string; contactId: string; unitId: string | null };
+export type CheckInRow = { meetingId: string; contactId: string; unitId: string | null; confirmedUnitIds?: string[] | null };
 
 export type Representation = {
   meetings: HeldMeeting[];
@@ -28,12 +29,25 @@ export async function representation(range: { start: string; end: string }): Pro
     // A meeting later than today hasn't happened, so it doesn't count yet.
     .where(and(eq(meeting.status, "held"), gte(meeting.date, range.start), lte(meeting.date, range.end), lte(meeting.date, appToday())))
     .orderBy(asc(meeting.date));
-  const checkIns: CheckInRow[] = meetings.length
+  const rows = meetings.length
     ? await db
-        .select({ meetingId: attendance.meetingId, contactId: attendance.contactId, unitId: attendance.unitId })
+        .select({
+          id: attendance.id,
+          meetingId: attendance.meetingId,
+          contactId: attendance.contactId,
+          unitId: attendance.unitId,
+          unitsConfirmed: attendance.unitsConfirmed,
+        })
         .from(attendance)
         .where(inArray(attendance.meetingId, meetings.map((m) => m.id)))
     : [];
+  const confirmed = await confirmedUnits(rows);
+  const checkIns: CheckInRow[] = rows.map((r) => ({
+    meetingId: r.meetingId,
+    contactId: r.contactId,
+    unitId: r.unitId,
+    confirmedUnitIds: confirmed.get(r.id) ?? null,
+  }));
   const contactIds = [...new Set(checkIns.map((c) => c.contactId))];
   const unitsOf = new Map<string, string[]>();
   if (contactIds.length) {
@@ -46,7 +60,10 @@ export async function representation(range: { start: string; end: string }): Pro
   const byMeeting = new Map<string, Set<string>>();
   for (const m of meetings) {
     const here = checkIns.filter((c) => c.meetingId === m.id);
-    byMeeting.set(m.id, unitsRepresented(here.map((c) => ({ representedUnitId: c.unitId, unitIds: unitsOf.get(c.contactId) ?? [] }))));
+    byMeeting.set(
+      m.id,
+      unitsRepresented(here.map((c) => ({ representedUnitId: c.unitId, unitIds: unitsOf.get(c.contactId) ?? [], confirmedUnitIds: c.confirmedUnitIds }))),
+    );
   }
   return { meetings, checkIns, unitsOf, byMeeting };
 }

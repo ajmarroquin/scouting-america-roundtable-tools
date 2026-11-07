@@ -68,6 +68,11 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
             <Badge variant="outline">{SOURCE_LABELS[c.source]}</Badge>
             {c.isYouth && <Badge variant="secondary">Youth</Badge>}
             {c.multipleRegistrations && <Badge variant="outline">Multiple registrations</Badge>}
+            {c.pendingReview && (
+              <Badge variant="outline" title="Added themselves at self check-in. Approve them from the meeting's review list.">
+                To review
+              </Badge>
+            )}
             {c.unsubscribed && (
               <Badge variant="outline" title="Unsubscribed from announcements. Left out of announcements and copied emails.">
                 Unsubscribed

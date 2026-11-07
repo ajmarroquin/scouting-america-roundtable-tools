@@ -29,4 +29,5 @@ export const SOURCE_LABELS: Record<string, string> = {
   import: "Roster import",
   manual: "Added by hand",
   walk_in: "Walk-in",
+  self_check_in: "Added themselves at check-in",
 };

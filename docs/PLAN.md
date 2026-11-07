@@ -220,7 +220,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
 | 4. Metrics (built) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements (built) | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
-| 6. Meeting page (planned) | Self check-in at the door, meeting place and join link, filling announcements from a meeting, RSVP, reminders | M to L | A public page in front of a private roster |
+| 6. Meeting page (6A built) | Self check-in at the door, meeting place and join link, filling announcements from a meeting, RSVP, reminders | M to L | A public page in front of a private roster |
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
 
@@ -326,7 +326,10 @@ One public page per meeting, reached by a QR code or a link in an announcement. 
 - **Rate limits** in a small `public_rate_limit` table: generous per IP, because a whole room shares the venue wifi (about 60 tries per 10 minutes per meeting), plus about 10 tries per email per meeting. A hidden honeypot field stops simple bots. Messages are generic.
 - **Written by the public, reviewed by editors**: new people, newly claimed units, and "I'm not with this unit anymore" go to a review list. Roster data is never overwritten by what someone types at the door.
 
-### 6A. Self check-in (first PR)
+### 6A. Self check-in (built)
+
+Built as planned: `app/(public)/m/[token]` with `lib/selfcheckin/rules.ts` (window, matching) and `lib/selfcheckin/service.ts` (every public step, the link, the review list); migration 0009 adds `meeting.public_token`, `contact.pending_review`, `attendance.units_confirmed`, `attendance_unit`, `checkin_review`, and `public_rate_limit`. The meeting page has the Self check-in card (QR drawn in the browser, copy, download, reset) and the To review list; the volunteer's check-in board refreshes every 15 seconds while the window is open. Verified with a DB test of every path and a phone-viewport browser run.
+
 
 - **Window**: from 30 minutes before `start_time` to 30 minutes after `end_time` (start plus 2 hours if there's no end), in `APP_TIME_ZONE`. No start time, no window: the link stays closed and the meeting page tells editors to add one. Outside the window the page says when check-in opens, or that it has closed (6C fills the "before" side with RSVP).
 - **Known person, units on record**: "Hi Sam. You're checking in and representing Pack 12, Troop 40 & Crew 7." Each unit can be unticked for tonight (not removed from their record), "Not with Troop 40 anymore?" files a removal for review, and "Representing another unit?" adds one from the district unit list, with an optional role. One unit: "...representing Pack 12. Representing more? Add them below." No units: "Which unit are you representing tonight?" plus "District, no unit".

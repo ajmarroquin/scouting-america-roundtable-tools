@@ -7,7 +7,8 @@ import { z } from "zod";
 import { NotAllowed } from "@/components/not-allowed";
 import { checkInPeople, getMeeting } from "@/lib/attendance/queries";
 import { isUpcoming } from "@/lib/attendance/schedule";
-import { appToday } from "@/lib/attendance/today";
+import { appTimeZone, appToday } from "@/lib/attendance/today";
+import { checkInWindow } from "@/lib/selfcheckin/rules";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
@@ -52,6 +53,7 @@ async function CheckInView({ params }: { params: PageProps<"/attendance/[id]/che
           checkedIn={attendees.map((a) => a.contactId)}
           units={units.filter((u) => u.active)}
           fromRoster={fromRoster}
+          live={!!m.publicToken && checkInWindow(m, new Date(), appTimeZone()).state === "open"}
         />
       )}
     </div>
