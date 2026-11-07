@@ -120,7 +120,7 @@ export function AttendeesTable({ attendees, canEdit, meetingId }: { attendees: A
   );
 }
 
-export function MeetingEditor({ meetingId, initial }: { meetingId: string; initial: MeetingValues }) {
+export function MeetingEditor({ meetingId, initial, today }: { meetingId: string; initial: MeetingValues; today: string }) {
   const [values, setValues] = useState(initial);
   const [pending, start] = useTransition();
   return (
@@ -136,7 +136,7 @@ export function MeetingEditor({ meetingId, initial }: { meetingId: string; initi
             start(async () => report(await updateMeetingAction(meetingId, values)));
           }}
         >
-          <MeetingFields idPrefix="edit" values={values} onChange={setValues} />
+          <MeetingFields idPrefix="edit" values={values} onChange={setValues} today={today} />
           <Button type="submit" className="w-fit" disabled={pending}>
             {pending ? "Saving…" : "Save"}
           </Button>

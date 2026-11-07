@@ -6,6 +6,8 @@ import { Suspense } from "react";
 import { z } from "zod";
 import { NotAllowed } from "@/components/not-allowed";
 import { checkInPeople, getMeeting } from "@/lib/attendance/queries";
+import { isUpcoming } from "@/lib/attendance/schedule";
+import { appToday } from "@/lib/attendance/today";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
@@ -41,6 +43,8 @@ async function CheckInView({ params }: { params: PageProps<"/attendance/[id]/che
       </Link>
       {m.status !== "held" ? (
         <p className="text-sm text-muted-foreground">This meeting is marked cancelled. Change it to held to check people in.</p>
+      ) : isUpcoming(m.date, appToday()) ? (
+        <p className="text-sm text-muted-foreground">This meeting hasn&apos;t happened yet. Check-in opens on the day.</p>
       ) : (
         <CheckInBoard
           meetingId={m.id}

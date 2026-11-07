@@ -246,7 +246,8 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
 
 ## Phase 3, part 1: what was built
 
-- **Meetings** (`/attendance`): one per date, held or cancelled, in person, virtual, or hybrid, with an optional topic. Listed by scouting year (September to August) with people and units counted per meeting. Editors add and edit; deleting a meeting, which takes its check-ins, is admin-only.
+- **Meetings** (`/attendance`): one per date, held or cancelled, in person, virtual, or hybrid, with an optional topic and start and end times (local to `APP_TIME_ZONE`; a new meeting starts with the latest meeting's times, or 7:00 to 8:30 pm). Listed by scouting year (September to August) with people and units counted per meeting. Editors add and edit; deleting a meeting, which takes its check-ins, is admin-only.
+  - **Upcoming meetings** (`lib/attendance/schedule.ts`): the whole year can go on the calendar ahead of time. A meeting dated after today shows as Upcoming ("Scheduled" in the editor), takes no check-ins until its day, and is left out of held counts, coverage, the council report, each person's record, and exports until then.
 - **Check-in** (`/attendance/[id]/check-in`, editors): built for a phone at the door. Search by name, preferred name, or unit; tap to check in, tap again to undo; the search clears after each check-in. "Add a walk-in" prefills the name from the search and checks them in. A walk-in who's already a contact (same email and first name) is just checked in.
 - **Meeting page**: who came, what unit each represented, and how they were checked in. A person in several units counts for all of them unless an editor picks the one they came for.
 - **Exports**: per scouting year, the old sheet's shape (people by meetings, "Attended", headcount row) and one row per check-in, as CSV or one Excel workbook; per meeting, a CSV.

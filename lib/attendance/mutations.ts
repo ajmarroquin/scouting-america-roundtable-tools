@@ -6,6 +6,8 @@ import type { CurrentUser } from "@/lib/auth/session";
 import { createContact, type NewContactInput } from "@/lib/contacts/mutations";
 import { db } from "@/lib/db";
 import { attendance, contact, MEETING_FORMATS, MEETING_STATUSES, meeting, unit } from "@/lib/db/schema";
+import { isUpcoming } from "./schedule";
+import { appToday } from "./today";
 import { meetingDateLabel } from "./year";
 
 export type Result = { ok: boolean; message: string; id?: string };
@@ -17,13 +19,30 @@ const optionalText = (max: number) =>
     .max(max)
     .transform((v) => (v === "" ? null : v));
 
-const meetingSchema = z.object({
-  date: z.iso.date("Pick a date"),
-  title: optionalText(120),
-  format: z.enum(MEETING_FORMATS),
-  status: z.enum(MEETING_STATUSES),
-  notes: optionalText(2000),
-});
+// "19:00" from a time input; blank means no time set.
+const clock = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(v), "Pick a time")
+  .transform((v) => (v === "" ? null : v.slice(0, 5)))
+  .optional()
+  .transform((v) => v ?? null);
+
+const meetingSchema = z
+  .object({
+    date: z.iso.date("Pick a date"),
+    startTime: clock,
+    endTime: clock,
+    title: optionalText(120),
+    format: z.enum(MEETING_FORMATS),
+    status: z.enum(MEETING_STATUSES),
+    notes: optionalText(2000),
+  })
+  .refine((m) => !m.endTime || !!m.startTime, { message: "Add a start time too.", path: ["startTime"] })
+  .refine((m) => !m.startTime || !m.endTime || m.endTime > m.startTime, {
+    message: "The meeting has to end after it starts.",
+    path: ["endTime"],
+  });
 
 export type MeetingInput = z.input<typeof meetingSchema>;
 
@@ -76,9 +95,10 @@ export async function checkIn(
   contactId: string,
   method: Method = "check_in",
 ): Promise<Result & { alreadyIn?: boolean }> {
-  const [m] = await db.select({ status: meeting.status }).from(meeting).where(eq(meeting.id, meetingId));
+  const [m] = await db.select({ status: meeting.status, date: meeting.date }).from(meeting).where(eq(meeting.id, meetingId));
   if (!m) return { ok: false, message: "That meeting no longer exists." };
   if (m.status !== "held") return { ok: false, message: "That meeting is marked cancelled. Change it to held first." };
+  if (isUpcoming(m.date, appToday())) return { ok: false, message: `That meeting isn't until ${meetingDateLabel(m.date)}. Check-in opens on the day.` };
   const [c] = await db.select({ id: contact.id }).from(contact).where(eq(contact.id, contactId));
   if (!c) return { ok: false, message: "That contact no longer exists." };
   const [row] = await db
@@ -134,9 +154,10 @@ export type BulkCheckInItem = z.input<typeof bulkItemSchema>;
 export async function bulkCheckIn(actor: CurrentUser, meetingId: string, raw: BulkCheckInItem[]): Promise<Result> {
   const parsed = z.array(bulkItemSchema).min(1, "Nobody to check in.").max(500).safeParse(raw);
   if (!parsed.success) return { ok: false, message: firstIssue(parsed.error) };
-  const [m] = await db.select({ status: meeting.status }).from(meeting).where(eq(meeting.id, meetingId));
+  const [m] = await db.select({ status: meeting.status, date: meeting.date }).from(meeting).where(eq(meeting.id, meetingId));
   if (!m) return { ok: false, message: "That meeting no longer exists." };
   if (m.status !== "held") return { ok: false, message: "That meeting is marked cancelled. Change it to held first." };
+  if (isUpcoming(m.date, appToday())) return { ok: false, message: `That meeting isn't until ${meetingDateLabel(m.date)}. Check-in opens on the day.` };
 
   let added = 0;
   let already = 0;

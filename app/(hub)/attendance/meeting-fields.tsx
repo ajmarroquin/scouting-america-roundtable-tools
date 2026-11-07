@@ -11,10 +11,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FORMAT_LABELS } from "@/lib/attendance/labels";
-
+import { isUpcoming } from "@/lib/attendance/schedule";
 
 export type MeetingValues = {
   date: string;
+  startTime: string;
+  endTime: string;
   title: string;
   format: "in_person" | "virtual" | "hybrid";
   status: "held" | "cancelled";
@@ -25,25 +27,52 @@ export function MeetingFields({
   idPrefix,
   values,
   onChange,
+  today,
   compact = false,
 }: {
   idPrefix: string;
   values: MeetingValues;
   onChange: (v: MeetingValues) => void;
+  /** The district's today, so a future meeting reads as scheduled rather than held. */
+  today: string;
   compact?: boolean;
 }) {
   const set = (patch: Partial<MeetingValues>) => onChange({ ...values, ...patch });
   return (
-    <div className="grid gap-3 sm:grid-cols-[auto_1fr_auto]">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor={`${idPrefix}-date`}>Date</Label>
-        <Input
-          id={`${idPrefix}-date`}
-          type="date"
-          required
-          value={values.date}
-          onChange={(e) => set({ date: e.target.value })}
-        />
+    <div className="grid gap-3 lg:grid-cols-[auto_1fr_auto]">
+      <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${idPrefix}-date`}>Date</Label>
+          <Input
+            id={`${idPrefix}-date`}
+            type="date"
+            required
+            value={values.date}
+            onChange={(e) => set({ date: e.target.value })}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${idPrefix}-start`}>Starts</Label>
+          <Input
+            id={`${idPrefix}-start`}
+            type="time"
+            step={300}
+            className="w-32"
+            value={values.startTime}
+            onChange={(e) => set({ startTime: e.target.value })}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${idPrefix}-end`}>Ends</Label>
+          <Input
+            id={`${idPrefix}-end`}
+            type="time"
+            step={300}
+            className="w-32"
+            value={values.endTime}
+            onChange={(e) => set({ endTime: e.target.value })}
+          />
+        </div>
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${idPrefix}-title`}>Topic (optional)</Label>
@@ -78,7 +107,7 @@ export function MeetingFields({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="held">Held</SelectItem>
+                <SelectItem value="held">{isUpcoming(values.date, today) ? "Scheduled" : "Held"}</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>

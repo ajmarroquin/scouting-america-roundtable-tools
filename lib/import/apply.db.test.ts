@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { CurrentUser } from "@/lib/auth/session";
 import { parseCsvText } from "./csv";
 import type { ImportPayload } from "./payload";
@@ -28,6 +28,10 @@ describe.skipIf(!local)("import against Postgres", () => {
   const actor: CurrentUser = { id: "test-admin", name: "Test", email: "admin@example.com", role: "admin" };
 
   beforeAll(async () => {
+    // Meetings after today count as upcoming, so pin today after the last
+    // fixture meeting (still in the 2026-27 scouting year).
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2027-02-01T17:00:00Z"));
     const client = new pg.Client({ connectionString: url });
     await client.connect();
     await client.query("drop schema if exists public cascade; drop schema if exists drizzle cascade; create schema public;");
@@ -605,5 +609,39 @@ describe.skipIf(!local)("import against Postgres", () => {
       message: expect.stringContaining("doesn't exist anymore"),
     });
     expect(await groups.addToGroup(actor, id, [sam.id])).toMatchObject({ ok: false });
+  });
+
+  it("keeps meeting times, and leaves upcoming meetings out of what was held", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const queries = await import("@/lib/attendance/queries");
+    const metrics = await import("@/lib/attendance/metrics");
+    const base = { title: "", format: "in_person" as const, status: "held" as const, notes: "" };
+
+    expect(await att.createMeeting(actor, { ...base, date: "2027-03-04", startTime: "20:00", endTime: "19:00" })).toMatchObject({
+      ok: false,
+      message: "The meeting has to end after it starts.",
+    });
+    expect(await att.createMeeting(actor, { ...base, date: "2027-03-04", endTime: "19:00" })).toMatchObject({ ok: false });
+    const made = await att.createMeeting(actor, { ...base, date: "2027-03-04", startTime: "19:00", endTime: "20:30" });
+    expect(made.ok).toBe(true);
+    const listed = (await queries.listMeetings()).find((m) => m.id === made.id)!;
+    expect([listed.startTime, listed.endTime]).toEqual(["19:00:00", "20:30:00"]);
+
+    // Today is pinned to Feb 1, 2027: the March meeting is on the calendar but not held yet.
+    const coverage = await metrics.coverageForYear("2026-27");
+    expect(coverage.meetings.map((m) => m.date)).not.toContain("2027-03-04");
+    const [someone] = await db.select().from(schema.contact).limit(1);
+    expect(await att.checkIn(actor, made.id!, someone.id)).toMatchObject({ ok: false, message: expect.stringContaining("Check-in opens on the day") });
+    const record = await queries.contactRecord(someone.id);
+    expect(record.meetings.map((m) => m.date)).not.toContain("2027-03-04");
+    const exported = await queries.attendanceForExport({ start: "2026-09-01", end: "2027-08-31" });
+    expect(exported.meetings.map((m) => m.date)).not.toContain("2027-03-04");
+
+    // On the day, it opens.
+    vi.setSystemTime(new Date("2027-03-04T23:00:00Z"));
+    expect(await att.checkIn(actor, made.id!, someone.id)).toMatchObject({ ok: true });
+    expect((await metrics.coverageForYear("2026-27")).meetings.map((m) => m.date)).toContain("2027-03-04");
+    expect(await att.updateMeeting(actor, made.id!, { ...base, date: "2027-03-04", startTime: "", endTime: "" })).toMatchObject({ ok: true });
+    vi.setSystemTime(new Date("2027-02-01T17:00:00Z"));
   });
 });

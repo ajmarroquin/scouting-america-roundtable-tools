@@ -213,6 +213,8 @@ await shot(admin, "paste-a-list");
 await admin.getByRole("button", { name: /^Check in \d+ (people|person)/ }).click();
 await admin.getByText(/^\d+ (people|person) from \d+ units?/).waitFor();
 const october = await newMeeting("2026-10-15", "Popcorn and recharter", null);
+// The next one is already on the calendar. Dated from today, so it stays upcoming.
+await newMeeting(new Date(Date.now() + 12 * 864e5).toISOString().slice(0, 10), "Program planning for spring", null);
 
 // Door check-in on a phone, as an editor.
 const phone = await session(EDITOR, { width: 390, height: 844 });

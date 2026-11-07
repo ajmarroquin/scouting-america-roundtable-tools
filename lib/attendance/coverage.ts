@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { affiliation, attendance, meeting } from "@/lib/db/schema";
+import { appToday } from "./today";
 import { unitsRepresented } from "./units";
 import { scoutingYearOf } from "./year";
 
@@ -24,7 +25,8 @@ export async function representation(range: { start: string; end: string }): Pro
   const meetings = await db
     .select({ id: meeting.id, date: meeting.date, title: meeting.title })
     .from(meeting)
-    .where(and(eq(meeting.status, "held"), gte(meeting.date, range.start), lte(meeting.date, range.end)))
+    // A meeting later than today hasn't happened, so it doesn't count yet.
+    .where(and(eq(meeting.status, "held"), gte(meeting.date, range.start), lte(meeting.date, range.end), lte(meeting.date, appToday())))
     .orderBy(asc(meeting.date));
   const checkIns: CheckInRow[] = meetings.length
     ? await db
