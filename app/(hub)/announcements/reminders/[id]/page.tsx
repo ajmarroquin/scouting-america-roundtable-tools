@@ -43,7 +43,7 @@ async function ReminderView({ params }: { params: PageProps<"/announcements/remi
   }
   return (
     <>
-      <Link href={`/attendance/${r.meetingId}`} className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link href={`/roundtables/${r.meetingId}`} className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeftIcon className="size-4" /> {meetingDateLabel(r.meetingDate)}
         {r.meetingTitle ? ` · ${r.meetingTitle}` : ""}
       </Link>

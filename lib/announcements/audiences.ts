@@ -8,6 +8,7 @@ import { OUTREACH_POSITIONS } from "@/lib/contacts/positions";
 import { db } from "@/lib/db";
 import { contactName, unitLabel } from "@/lib/contacts/format";
 import { affiliation, contact, meeting, rsvp, unit } from "@/lib/db/schema";
+import { rolesFor } from "@/lib/contacts/roles";
 import { getGroup, groupMemberIds, groupMembership, groupsOf, listGroups } from "@/lib/groups/store";
 import type { Member } from "./mailer";
 import { type LeftOutReason, leftOutReason, type Reach, reach } from "./reach";
@@ -145,6 +146,8 @@ export type RosterPerson = {
   status: string;
   unsubscribed: boolean;
   pendingReview: boolean;
+  /** Filled in for the "who's in it" list only. */
+  roles?: string;
 };
 
 async function candidates(ids: string[] | "all"): Promise<RosterPerson[]> {
@@ -185,6 +188,8 @@ export async function audienceRoster(key: string): Promise<Reach<RosterPerson>> 
   const ids = await audienceContactIds(key);
   const result = reach(await candidates(ids));
   if (ids === "all") result.leftOut = result.leftOut.filter((p) => p.reason !== "archived" && p.reason !== "not_in_roster");
+  const roles = await rolesFor([...result.members, ...result.leftOut].map((p) => p.contactId));
+  for (const p of [...result.members, ...result.leftOut]) p.roles = roles.get(p.contactId) ?? "";
   return result;
 }
 

@@ -47,7 +47,7 @@ export function WhoIsIn({ audienceKey }: { audienceKey: string }) {
                 <Link href={`/contacts/${p.contactId}`} className="underline-offset-4 hover:underline">
                   {p.name}
                 </Link>
-                <span className="text-muted-foreground">{p.email}</span>
+                <span className="text-muted-foreground">{[p.roles, p.email].filter(Boolean).join(" · ")}</span>
               </li>
             ))}
           </ul>
@@ -61,6 +61,7 @@ export function WhoIsIn({ audienceKey }: { audienceKey: string }) {
                   <Link href={`/contacts/${p.contactId}`} className="underline-offset-4 hover:underline">
                     {p.name}
                   </Link>
+                  {p.roles && <span className="text-muted-foreground">{p.roles} ·</span>}
                   <span className="text-muted-foreground">
                     {p.reason === "shared_email" && p.sharedWith ? `Shares an email with ${p.sharedWith}, who gets it` : LEFT_OUT[p.reason]}
                   </span>

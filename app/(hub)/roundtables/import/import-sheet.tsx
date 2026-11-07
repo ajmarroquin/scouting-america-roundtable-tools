@@ -151,7 +151,7 @@ export function ImportSheet({ data, today }: { data: LegacyMatchData; today: str
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild>
-            <Link href="/attendance">See the meetings</Link>
+            <Link href="/roundtables">See the meetings</Link>
           </Button>
           <Button variant="outline" onClick={() => setDone(null)}>
             Load another sheet

@@ -150,7 +150,7 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
             <ul className="flex flex-col divide-y rounded-lg border text-sm">
               {history.meetings.slice(0, 12).map((m) => (
                 <li key={m.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                  <Link href={`/attendance/${m.id}`} className="underline-offset-4 hover:underline">
+                  <Link href={`/roundtables/${m.id}`} className="underline-offset-4 hover:underline">
                     {meetingDateLabel(m.date)}
                     {m.title ? ` · ${m.title}` : ""}
                   </Link>

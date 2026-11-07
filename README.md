@@ -16,7 +16,7 @@ Import the "all registered people" export from Scouting America's reports. The a
 
 ![The contact list with filters and copy emails](docs/screenshots/contacts.png)
 
-### Attendance at the door
+### Roundtables and check-in at the door
 
 Check people in on a phone: type a few letters of a name or unit and tap. Someone new? Add them as a walk-in in the same screen.
 
@@ -26,7 +26,7 @@ Or let people check themselves in. Each meeting has a QR code and link that open
 
 <img src="docs/screenshots/self-check-in.png" alt="Checking yourself in on a phone and confirming your units" width="300">
 
-Meetings are listed by scouting year, held, upcoming, or cancelled, with start and end times and an export in the shape of the old sign-in sheet.
+Roundtables are listed by scouting year, held, upcoming, or cancelled, with start and end times and an export in the shape of the old sign-in sheet.
 
 ![Roundtables for a scouting year](docs/screenshots/attendance.png)
 

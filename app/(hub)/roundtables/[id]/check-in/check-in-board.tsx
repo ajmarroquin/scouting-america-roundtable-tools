@@ -114,7 +114,7 @@ export function CheckInBoard({
                 >
                   <span>
                     <span className="block text-base font-medium">{p.name}</span>
-                    <span className="block text-sm text-muted-foreground">{p.units.join(", ") || p.email || "No unit"}
+                    <span className="block text-sm text-muted-foreground">{p.roles || p.email || "No unit"}
                       {saidYes.includes(p.id) && <span className="ml-1 font-medium text-foreground">· said yes</span>}</span>
                   </span>
                   <span className="shrink-0 text-sm font-medium">
@@ -160,7 +160,7 @@ export function CheckInBoard({
               <li key={p.id} className="flex items-center justify-between gap-2 px-4 py-2">
                 <span>
                   <span className="block text-sm font-medium">{p.name}</span>
-                  <span className="block text-xs text-muted-foreground">{p.units.join(", ")}</span>
+                  <span className="block text-xs text-muted-foreground">{p.roles}</span>
                 </span>
                 <Button variant="ghost" size="sm" onClick={() => toggle(p)} aria-label={`Undo check-in for ${p.name}`}>
                   Undo

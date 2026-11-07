@@ -24,7 +24,8 @@ export function ReviewList({ reviews, people }: { reviews: ReviewItem[]; people:
       <CardHeader>
         <CardTitle>To review</CardTitle>
         <CardDescription>
-          From self check-in and RSVPs. New people are left out of announcements until you approve them; new units count once approved.
+          From self check-in and RSVPs. People who matched a contact count right away; this is only about their record. New people
+          are left out of announcements, and their units don&apos;t count, until you approve them.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col divide-y">
@@ -50,7 +51,7 @@ function PersonReviews({ items, people }: { items: ReviewItem[]; people: CheckIn
     });
   const matches = query.trim().length >= 2
     ? people
-        .filter((p) => p.id !== first.contactId && `${p.name} ${p.email ?? ""} ${p.units.join(" ")}`.toLowerCase().includes(query.trim().toLowerCase()))
+        .filter((p) => p.id !== first.contactId && `${p.name} ${p.email ?? ""} ${p.units.join(" ")} ${p.roles}`.toLowerCase().includes(query.trim().toLowerCase()))
         .slice(0, 8)
     : [];
 
@@ -60,7 +61,7 @@ function PersonReviews({ items, people }: { items: ReviewItem[]; people: CheckIn
         <Link href={`/contacts/${first.contactId}`} className="font-medium underline-offset-4 hover:underline">
           {first.name}
         </Link>
-        {first.email && <span className="text-sm text-muted-foreground">{first.email}</span>}
+        <span className="text-sm text-muted-foreground">{[first.roles, first.email].filter(Boolean).join(" · ")}</span>
         {isNew && <Badge variant="outline">New here</Badge>}
       </div>
       {items.map((r) => (
@@ -70,7 +71,10 @@ function PersonReviews({ items, people }: { items: ReviewItem[]; people: CheckIn
             {r.kind === "add_unit" && (
               <>
                 Says they&apos;re with <span className="font-medium">{r.unitLabel}</span>
-                {r.role && ` as ${r.role}`}.
+                {r.role && ` as ${r.role}`}.{" "}
+                <span className="text-muted-foreground">
+                  {r.newPerson ? "Counts once you approve them." : "Counted at this roundtable. Add it to their record?"}
+                </span>
               </>
             )}
             {r.kind === "remove_unit" && (
@@ -96,10 +100,10 @@ function PersonReviews({ items, people }: { items: ReviewItem[]; people: CheckIn
             ) : (
               <>
                 <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => approveReviewAction(r.id))}>
-                  {r.kind === "remove_unit" && r.fromRoster ? "Noted" : "Approve"}
+                  {r.kind === "remove_unit" ? (r.fromRoster ? "Noted" : "Take it off") : "Add to record"}
                 </Button>
                 <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => rejectReviewAction(r.id))}>
-                  {r.kind === "remove_unit" ? "Keep the unit" : "Don't add"}
+                  {r.kind === "remove_unit" ? "Keep the unit" : "Not with this unit"}
                 </Button>
               </>
             )}
@@ -118,7 +122,7 @@ function PersonReviews({ items, people }: { items: ReviewItem[]; people: CheckIn
               onClick={() => run(() => mergeReviewAction(items.find((r) => r.kind === "new_person")!.id, p.id))}
             >
               <span className="font-medium">{p.name}</span>
-              <span className="text-xs text-muted-foreground">{[p.email, ...p.units].filter(Boolean).join(" · ")}</span>
+              <span className="text-xs text-muted-foreground">{[p.roles, p.email].filter(Boolean).join(" · ")}</span>
             </button>
           ))}
           <p className="text-xs text-muted-foreground">Their check-in moves to that person, and the email they typed becomes that person&apos;s second email.</p>

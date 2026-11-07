@@ -178,7 +178,7 @@ await admin.getByText("Loaded", { exact: true }).waitFor();
 
 // Last year's sheet, with the real dates (third Thursdays).
 const dates = { "Sep 25": "2025-09-18", "Oct 25": "2025-10-16", "Nov 25": "2025-11-20", "Dec 25": "2025-12-18", "Jan 26": "2026-01-15", "Feb 26": "2026-02-19", "Mar 26": "2026-03-19", "Apr 26": "2026-04-16", "May 26": "2026-05-21" };
-await open(admin, "/attendance/import");
+await open(admin, "/roundtables/import");
 await admin.getByLabel("CSV file").setInputFiles(sheet);
 await admin.getByText(/^Found \d+ people/).waitFor();
 for (const [header, date] of Object.entries(dates)) await admin.getByLabel(`Date for ${header}`).fill(date);
@@ -192,7 +192,7 @@ await admin.getByText("Loaded", { exact: true }).waitFor();
 
 // This year: a virtual roundtable from a Zoom report, and one checked in at the door.
 async function newMeeting(date, topic, format) {
-  await open(admin, "/attendance");
+  await open(admin, "/roundtables");
   await admin.getByLabel("Date", { exact: true }).first().fill(date);
   await admin.getByLabel("Topic (optional)").first().fill(topic);
   if (format) {
@@ -200,7 +200,7 @@ async function newMeeting(date, topic, format) {
     await admin.getByRole("option", { name: format }).click();
   }
   await admin.getByRole("button", { name: "Add meeting" }).click();
-  await admin.waitForURL(/\/attendance\/[0-9a-f-]{36}$/);
+  await admin.waitForURL(/\/roundtables\/[0-9a-f-]{36}$/);
   await admin.waitForLoadState("networkidle");
   return admin.url();
 }
@@ -248,7 +248,7 @@ await admin.getByText("Test group", { exact: true }).first().waitFor();
 await admin.goto(october);
 await admin.waitForLoadState("networkidle");
 await shot(admin, "meeting", true);
-await open(admin, "/attendance");
+await open(admin, "/roundtables");
 await admin.getByRole("combobox", { name: "Scouting year" }).click();
 await admin.getByRole("option", { name: "2025-26 scouting year" }).click();
 await shot(admin, "attendance");
@@ -306,13 +306,13 @@ await shot(admin, "announcements");
 // Self check-in: a meeting happening now, its QR link, and a leader checking in on a phone.
 const zoned = (d, opts) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", ...opts }).format(d);
 const at = (minutes) => zoned(new Date(Date.now() + minutes * 60000), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-await open(admin, "/attendance");
+await open(admin, "/roundtables");
 await admin.locator("#new-date").fill(zoned(new Date(), { year: "numeric", month: "2-digit", day: "2-digit" }));
 await admin.locator("#new-start").fill(at(-10));
 await admin.locator("#new-end").fill(at(80));
 await admin.getByLabel("Topic (optional)").first().fill("Spring program planning");
 await admin.getByRole("button", { name: "Add meeting" }).click();
-await admin.waitForURL(/\/attendance\/[0-9a-f-]{36}$/);
+await admin.waitForURL(/\/roundtables\/[0-9a-f-]{36}$/);
 await admin.getByRole("button", { name: "Show QR code and link" }).click();
 const checkInLink = await admin.locator("p.font-mono").innerText();
 const guest = await (await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light" })).newPage();

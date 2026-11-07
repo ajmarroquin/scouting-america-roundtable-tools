@@ -14,8 +14,8 @@ export const metadata: Metadata = { title: "Load an old attendance sheet" };
 export default function ImportSheetPage() {
   return (
     <div className="flex flex-col gap-4">
-      <Link href="/attendance" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeftIcon className="size-4" /> Attendance
+      <Link href="/roundtables" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeftIcon className="size-4" /> Roundtables
       </Link>
       <div>
         <h1 className="text-2xl font-semibold">Load an old attendance sheet</h1>

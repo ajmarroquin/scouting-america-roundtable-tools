@@ -8,7 +8,7 @@ import { visibleTools, type Tool } from "@/lib/tools/registry";
 
 const ICONS: Record<string, LucideIcon> = {
   contacts: ContactRoundIcon,
-  attendance: ClipboardCheckIcon,
+  roundtables: ClipboardCheckIcon,
   units: TentIcon,
   "council-report": ChartColumnIncreasingIcon,
   announcements: MegaphoneIcon,

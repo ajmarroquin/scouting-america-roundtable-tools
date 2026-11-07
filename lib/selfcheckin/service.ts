@@ -6,6 +6,7 @@ import { appTimeZone, appToday } from "@/lib/attendance/today";
 import { writeAudit } from "@/lib/audit";
 import type { CurrentUser } from "@/lib/auth/session";
 import { compareUnits, contactName, unitLabel } from "@/lib/contacts/format";
+import { rolesFor } from "@/lib/contacts/roles";
 import { db } from "@/lib/db";
 import { affiliation, attendance, attendanceUnit, checkinReview, contact, meeting, publicRateLimit, rsvp, unit } from "@/lib/db/schema";
 import { checkInWindow, looksLikeEmail, matchPeople, normalizeEmail, normalizeName, SELF_REPORTED_ROLE, type WindowState } from "./rules";
@@ -39,7 +40,17 @@ export type Mode = "check_in" | "rsvp";
 export type Response = "yes" | "no";
 
 export type UnitChoice = { id: string; label: string };
-export type Person = { contactId: string; firstName: string; units: UnitChoice[]; alreadyIn: boolean; rsvp: Response | null };
+/** One of the person's units: from their record with their roles, or claimed at an earlier check-in and not on the record yet. */
+export type PersonUnit = UnitChoice & { role: string | null; pending: boolean };
+export type Person = {
+  contactId: string;
+  firstName: string;
+  units: PersonUnit[];
+  alreadyIn: boolean;
+  /** Already checked in: the units they said they represent tonight. */
+  representing: string[] | null;
+  rsvp: Response | null;
+};
 
 export type IdentifyResult =
   | { ok: false; message: string }
@@ -124,24 +135,52 @@ async function findPeople(email: string, lastName: string) {
       altEmail: contact.altEmail,
       isYouth: contact.isYouth,
       status: contact.status,
+      pendingReview: contact.pendingReview,
     })
     .from(contact)
     .where(or(sql`lower(trim(${contact.email})) = ${e}`, sql`lower(trim(${contact.altEmail})) = ${e}`));
   return matchPeople(rows, email, lastName);
 }
 
-async function unitsOf(contactId: string): Promise<UnitChoice[]> {
+/** Their units on record, each with their roles there ("Pack 662 · Cubmaster"). */
+async function unitsOf(contactId: string): Promise<PersonUnit[]> {
   const rows = await db
-    .selectDistinct({ id: unit.id, type: unit.type, number: unit.number, genderAccepted: unit.genderAccepted })
+    .select({ id: unit.id, type: unit.type, number: unit.number, genderAccepted: unit.genderAccepted, position: affiliation.position })
     .from(affiliation)
     .innerJoin(unit, eq(unit.id, affiliation.unitId))
     .where(eq(affiliation.contactId, contactId));
-  return rows.sort(compareUnits).map((u) => ({ id: u.id, label: unitLabel(u) }));
+  const byUnit = new Map<string, (typeof rows)[number] & { roles: string[] }>();
+  for (const r of rows) {
+    const u = byUnit.get(r.id) ?? { ...r, roles: [] };
+    if (!u.roles.includes(r.position)) u.roles.push(r.position);
+    byUnit.set(r.id, u);
+  }
+  return [...byUnit.values()].sort(compareUnits).map((u) => ({ id: u.id, label: unitLabel(u), role: u.roles.join(", "), pending: false }));
+}
+
+/** Units they claimed at check-in that aren't on their record yet (an editor hasn't added them). */
+async function claimsOf(contactId: string, onRecord: Set<string>): Promise<PersonUnit[]> {
+  const rows = await db
+    .select({ id: unit.id, type: unit.type, number: unit.number, genderAccepted: unit.genderAccepted, role: checkinReview.role })
+    .from(checkinReview)
+    .innerJoin(unit, eq(unit.id, checkinReview.unitId))
+    .where(and(eq(checkinReview.contactId, contactId), eq(checkinReview.kind, "add_unit"), eq(checkinReview.status, "open")));
+  const seen = new Set<string>();
+  return rows
+    .filter((r) => !onRecord.has(r.id) && !seen.has(r.id) && seen.add(r.id))
+    .sort(compareUnits)
+    .map((u) => ({ id: u.id, label: unitLabel(u), role: u.role, pending: true }));
+}
+
+/** Everything that's theirs: the record plus earlier claims. */
+async function allUnitsOf(contactId: string): Promise<PersonUnit[]> {
+  const record = await unitsOf(contactId);
+  return [...record, ...(await claimsOf(contactId, new Set(record.map((u) => u.id))))];
 }
 
 async function personFor(meetingId: string, c: { id: string; firstName: string; preferredName: string | null }): Promise<Person> {
   const [units, [existing], [answer]] = await Promise.all([
-    unitsOf(c.id),
+    allUnitsOf(c.id),
     db
       .select({ id: attendance.id })
       .from(attendance)
@@ -151,11 +190,15 @@ async function personFor(meetingId: string, c: { id: string; firstName: string; 
       .from(rsvp)
       .where(and(eq(rsvp.meetingId, meetingId), eq(rsvp.contactId, c.id))),
   ]);
+  const representing = existing
+    ? (await db.select({ unitId: attendanceUnit.unitId }).from(attendanceUnit).where(eq(attendanceUnit.attendanceId, existing.id))).map((r) => r.unitId)
+    : null;
   return {
     contactId: c.id,
     firstName: c.preferredName || c.firstName,
     units,
     alreadyIn: !!existing,
+    representing,
     rsvp: (answer?.response as Response | undefined) ?? null,
   };
 }
@@ -213,18 +256,24 @@ export async function confirm(token: string, raw: unknown, ip: string, now = new
   if (!g.ok) return g;
   const person = (await findPeople(input.email, input.lastName)).find((p) => p.id === input.contactId);
   if (!person) return { ok: false, message: GENERIC };
-  const theirs = new Set((await unitsOf(person.id)).map((u) => u.id));
+  const units = await allUnitsOf(person.id);
+  const theirs = new Set(units.map((u) => u.id));
+  const onRecord = new Set(units.filter((u) => !u.pending).map((u) => u.id));
   const active = new Set((await unitChoices()).map((u) => u.id));
   const representing = [...new Set(input.representing)].filter((id) => theirs.has(id));
-  const leaving = [...new Set(input.leaving)].filter((id) => theirs.has(id) && !representing.includes(id));
+  const leaving = [...new Set(input.leaving)].filter((id) => onRecord.has(id) && !representing.includes(id));
   const adding = input.adding.filter((a, i, all) => active.has(a.unitId) && !theirs.has(a.unitId) && all.findIndex((b) => b.unitId === a.unitId) === i);
-  await record(g.meeting.id, person.id, representing, adding, leaving);
+  // Earlier claims they still say they represent stay claims (and stay in review).
+  const stillClaimed = units.filter((u) => u.pending && representing.includes(u.id)).map((u) => ({ unitId: u.id, role: u.role ?? undefined }));
+  await record(g.meeting.id, person.id, representing.filter((id) => onRecord.has(id)), [...stillClaimed, ...adding], leaving, {
+    claimsCount: !person.pendingReview,
+  });
   const name = person.preferredName || person.firstName;
   return {
     ok: true,
     joinUrl: g.meeting.joinUrl,
     message: adding.length || leaving.length
-      ? `You're checked in, ${name}. Thanks for coming! A volunteer will update your units.`
+      ? `You're checked in, ${name}. Thanks for coming! A volunteer will update your record.`
       : `You're checked in, ${name}. Thanks for coming!`,
   };
 }
@@ -235,8 +284,10 @@ async function record(
   representing: string[],
   adding: { unitId: string; role?: string }[],
   leaving: string[],
-  newPerson = false,
+  { newPerson = false, claimsCount }: { newPerson?: boolean; claimsCount: boolean },
 ) {
+  // Someone who matched an approved contact proved who they are, so the units they claim count now;
+  // the claim waits in review only to be added to their record. A new person's units count once they're approved.
   await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(attendance)
@@ -246,23 +297,21 @@ async function record(
     await tx.delete(attendanceUnit).where(eq(attendanceUnit.attendanceId, row.id));
     const units = [
       ...representing.map((unitId) => ({ attendanceId: row.id, unitId, approved: true })),
-      ...adding.map((a) => ({ attendanceId: row.id, unitId: a.unitId, approved: false })),
+      ...adding.map((a) => ({ attendanceId: row.id, unitId: a.unitId, approved: claimsCount })),
     ];
     if (units.length) await tx.insert(attendanceUnit).values(units);
-    // What they said last time at this meeting is replaced, not added to.
-    await tx
-      .delete(checkinReview)
-      .where(
-        and(
-          eq(checkinReview.meetingId, meetingId),
-          eq(checkinReview.contactId, contactId),
-          eq(checkinReview.status, "open"),
-          inArray(checkinReview.kind, ["add_unit", "remove_unit"]),
-        ),
-      );
+    // What they said last time at this meeting is replaced: removals, and claims they no longer make.
+    const claimed = adding.map((a) => a.unitId);
+    const open = await tx
+      .select()
+      .from(checkinReview)
+      .where(and(eq(checkinReview.contactId, contactId), eq(checkinReview.status, "open"), inArray(checkinReview.kind, ["add_unit", "remove_unit"])));
+    const drop = open.filter((r) => r.meetingId === meetingId && (r.kind === "remove_unit" || !claimed.includes(r.unitId!))).map((r) => r.id);
+    if (drop.length) await tx.delete(checkinReview).where(inArray(checkinReview.id, drop));
+    const alreadyClaimed = new Set(open.filter((r) => r.kind === "add_unit" && !drop.includes(r.id)).map((r) => r.unitId));
     const reviews = [
       ...(newPerson ? [{ meetingId, contactId, kind: "new_person" }] : []),
-      ...adding.map((a) => ({ meetingId, contactId, kind: "add_unit", unitId: a.unitId, role: a.role || null })),
+      ...adding.filter((a) => !alreadyClaimed.has(a.unitId)).map((a) => ({ meetingId, contactId, kind: "add_unit", unitId: a.unitId, role: a.role || null })),
       ...leaving.map((unitId) => ({ meetingId, contactId, kind: "remove_unit", unitId })),
     ];
     if (reviews.length) await tx.insert(checkinReview).values(reviews);
@@ -298,7 +347,7 @@ export async function registerNew(token: string, raw: unknown, ip: string, now =
   if (existing.length === 1) {
     const theirs = await unitsOf(existing[0].id);
     const ids = new Set(theirs.map((u) => u.id));
-    await record(g.meeting.id, existing[0].id, [...ids], adding.filter((a) => !ids.has(a.unitId)), []);
+    await record(g.meeting.id, existing[0].id, [...ids], adding.filter((a) => !ids.has(a.unitId)), [], { claimsCount: !existing[0].pendingReview });
     return { ok: true, message: `You're checked in, ${input.firstName}. Thanks for coming!`, joinUrl: g.meeting.joinUrl };
   }
 
@@ -307,7 +356,7 @@ export async function registerNew(token: string, raw: unknown, ip: string, now =
     .values({ firstName: input.firstName, lastName: input.lastName, email: input.email.trim(), source: "self_check_in", pendingReview: true })
     .returning({ id: contact.id });
   await writeAudit(null, "contact.self_add", { type: "contact", id: created.id }, { meetingId: g.meeting.id });
-  await record(g.meeting.id, created.id, [], adding, [], true);
+  await record(g.meeting.id, created.id, [], adding, [], { newPerson: true, claimsCount: false });
   return { ok: true, message: `You're checked in, ${input.firstName}. Welcome! A volunteer will add you to our list.`, joinUrl: g.meeting.joinUrl };
 }
 
@@ -370,7 +419,8 @@ export async function answerNew(token: string, raw: unknown, ip: string, now = n
   return { ok: true, message: answered(input.firstName, input.response), joinUrl: input.response === "yes" ? g.meeting.joinUrl : null };
 }
 
-export type RsvpList = { yes: { contactId: string; name: string }[]; no: { contactId: string; name: string }[] };
+type RsvpPerson = { contactId: string; name: string; roles: string };
+export type RsvpList = { yes: RsvpPerson[]; no: RsvpPerson[] };
 
 /** Who said they're coming, and who said they can't, for the meeting page. */
 export async function rsvpsFor(meetingId: string): Promise<RsvpList> {
@@ -381,7 +431,8 @@ export async function rsvpsFor(meetingId: string): Promise<RsvpList> {
     .innerJoin(contact, eq(contact.id, rsvp.contactId))
     .where(eq(rsvp.meetingId, meetingId))
     .orderBy(asc(contact.lastName), asc(contact.firstName));
-  const list = (r: string) => rows.filter((x) => x.response === r).map((x) => ({ contactId: x.c.id, name: contactName(x.c) }));
+  const roles = await rolesFor(rows.map((x) => x.c.id));
+  const list = (r: string) => rows.filter((x) => x.response === r).map((x) => ({ contactId: x.c.id, name: contactName(x.c), roles: roles.get(x.c.id) ?? "" }));
   return { yes: list("yes"), no: list("no") };
 }
 
@@ -415,6 +466,9 @@ export type ReviewItem = {
   unitLabel: string | null;
   role: string | null;
   fromRoster: boolean;
+  /** The person added themselves and isn't approved yet. */
+  newPerson: boolean;
+  roles: string;
 };
 
 export async function openReviews(meetingId: string): Promise<ReviewItem[]> {
@@ -433,7 +487,9 @@ export async function openReviews(meetingId: string): Promise<ReviewItem[]> {
         .from(affiliation)
         .where(and(eq(affiliation.source, "import"), inArray(affiliation.contactId, removals.map((r) => r.c.id))))
     : [];
+  const roles = await rolesFor(rows.map((x) => x.c.id));
   return rows.map(({ r, c, u }) => ({
+    roles: roles.get(c.id) ?? "",
     id: r.id,
     kind: r.kind as ReviewItem["kind"],
     contactId: c.id,
@@ -442,6 +498,7 @@ export async function openReviews(meetingId: string): Promise<ReviewItem[]> {
     unitLabel: u ? unitLabel(u) : null,
     role: r.role,
     fromRoster: r.kind === "remove_unit" && roster.some((a) => a.contactId === c.id && a.unitId === r.unitId),
+    newPerson: c.pendingReview,
   }));
 }
 
@@ -459,6 +516,9 @@ export async function approveReview(actor: CurrentUser, id: string): Promise<Don
   await db.transaction(async (tx) => {
     if (r.kind === "new_person") {
       await tx.update(contact).set({ pendingReview: false }).where(eq(contact.id, r.contactId));
+      // Approved: the units they said they represent count now.
+      const theirs = await tx.select({ id: attendance.id }).from(attendance).where(eq(attendance.contactId, r.contactId));
+      if (theirs.length) await tx.update(attendanceUnit).set({ approved: true }).where(inArray(attendanceUnit.attendanceId, theirs.map((a) => a.id)));
     } else if (r.kind === "add_unit" && r.unitId) {
       const [a] = await tx
         .select({ id: attendance.id })
@@ -494,12 +554,16 @@ export async function rejectReview(actor: CurrentUser, id: string): Promise<Done
         .select({ id: attendance.id })
         .from(attendance)
         .where(and(eq(attendance.meetingId, r.meetingId), eq(attendance.contactId, r.contactId)));
-      if (a) await tx.delete(attendanceUnit).where(and(eq(attendanceUnit.attendanceId, a.id), eq(attendanceUnit.unitId, r.unitId), eq(attendanceUnit.approved, false)));
+      // Not with this unit: it doesn't count at this roundtable either.
+      if (a) await tx.delete(attendanceUnit).where(and(eq(attendanceUnit.attendanceId, a.id), eq(attendanceUnit.unitId, r.unitId)));
     }
     await tx.update(checkinReview).set(resolved(actor, "rejected")).where(eq(checkinReview.id, id));
     await writeAudit(actor, `review.reject_${r.kind}`, { type: "contact", id: r.contactId }, { meetingId: r.meetingId, unitId: r.unitId }, tx);
   });
-  return { ok: true, message: r.kind === "new_person" ? "Removed them and their check-in." : "Left as it was." };
+  return {
+    ok: true,
+    message: r.kind === "new_person" ? "Removed them and their check-in." : r.kind === "add_unit" ? "Took that unit off their check-in." : "Left as it was.",
+  };
 }
 
 /**

@@ -28,7 +28,7 @@ describe("reminders", () => {
   it("start from drafts filled in from the meeting, with nothing left to fill", () => {
     const week = reminderDraft("week_before", meeting);
     expect(week).toMatchObject({ audience: "unit-leaders", subject: "Roundtable is next Thursday, Nov 19" });
-    expect(week.body).toContain("at St. Mark's Hall or online");
+    expect(week.body).toContain("at St. Mark's Hall, and online for anyone who can't make it in person");
     expect(draftWarnings(week.body)).toEqual([]);
 
     const day = reminderDraft("day_of", meeting);

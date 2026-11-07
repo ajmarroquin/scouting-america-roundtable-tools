@@ -117,7 +117,7 @@ async function UnitView({
               {meetings.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell>
-                    <Link href={`/attendance/${m.id}`} className="underline-offset-4 hover:underline">
+                    <Link href={`/roundtables/${m.id}`} className="underline-offset-4 hover:underline">
                       {meetingDateLabel(m.date, "short")}
                     </Link>
                   </TableCell>
