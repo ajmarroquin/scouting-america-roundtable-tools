@@ -4,6 +4,7 @@ import { compareUnits, contactName, unitLabel } from "@/lib/contacts/format";
 import { db } from "@/lib/db";
 import { affiliation, attendance, contact, meeting, unit } from "@/lib/db/schema";
 import type { ExportAttendance, ExportMeeting } from "./export";
+import { appTimeZone, appToday } from "./today";
 import { personRecord } from "./trends";
 import { unitsRepresented } from "./units";
 import { scoutingYearOf, todayIn, yearRange } from "./year";
@@ -16,6 +17,8 @@ export type MeetingRow = {
   title: string | null;
   format: string;
   status: string;
+  startTime: string | null;
+  endTime: string | null;
   notes: string | null;
   attendees: number;
   units: number;
@@ -147,7 +150,8 @@ export async function attendanceForExport(range?: { start: string; end: string }
   meetings: ExportMeeting[];
   rows: ExportAttendance[];
 }> {
-  const inRange = range ? and(gte(meeting.date, range.start), lte(meeting.date, range.end)) : undefined;
+  // Upcoming meetings have nobody to export yet.
+  const inRange = and(lte(meeting.date, appToday()), range ? and(gte(meeting.date, range.start), lte(meeting.date, range.end)) : undefined);
   const meetings = await db
     .select({ id: meeting.id, date: meeting.date, title: meeting.title, status: meeting.status })
     .from(meeting)
@@ -174,9 +178,7 @@ export async function attendanceForExport(range?: { start: string; end: string }
   };
 }
 
-export function appTimeZone(): string {
-  return process.env.APP_TIME_ZONE || "America/New_York";
-}
+export { appTimeZone } from "./today";
 
 /** One person's roundtables: this year's count, the last one, the current streak, and the list. */
 export async function contactRecord(contactId: string) {
@@ -184,7 +186,7 @@ export async function contactRecord(contactId: string) {
     db
       .select({ id: meeting.id, date: meeting.date, title: meeting.title })
       .from(meeting)
-      .where(eq(meeting.status, "held"))
+      .where(and(eq(meeting.status, "held"), lte(meeting.date, appToday())))
       .orderBy(asc(meeting.date)),
     db
       .select({ meetingId: attendance.meetingId, method: attendance.method })

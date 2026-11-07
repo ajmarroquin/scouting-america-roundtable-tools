@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { attendanceLong, attendanceMatrix } from "@/lib/attendance/export";
 import type { MeetingRow } from "@/lib/attendance/queries";
+import { isUpcoming, suggestedTimes, timeRange } from "@/lib/attendance/schedule";
 import { meetingDateLabel, scoutingYearOf } from "@/lib/attendance/year";
 import { FORMAT_LABELS } from "@/lib/attendance/labels";
 import { downloadCsv, downloadXlsx } from "@/lib/export/download";
@@ -58,7 +59,13 @@ export function MeetingsView({
   const [year, setYear] = useState(currentYear);
   const shown = meetings.filter((m) => scoutingYearOf(m.date) === year);
   const todays = meetings.find((m) => m.date === today && m.status === "held");
-  const [values, setValues] = useState<MeetingValues>({ date: today, title: "", format: "in_person", status: "held", notes: "" });
+  const [values, setValues] = useState<MeetingValues>(() => {
+    const times = suggestedTimes(meetings);
+    return { date: today, startTime: times.start, endTime: times.end, title: "", format: "in_person", status: "held", notes: "" };
+  });
+  const held = shown.filter((m) => m.status === "held" && !isUpcoming(m.date, today)).length;
+  const upcoming = shown.filter((m) => m.status === "held" && isUpcoming(m.date, today)).length;
+  const cancelled = shown.filter((m) => m.status === "cancelled").length;
   const [pending, start] = useTransition();
 
   async function exportYear(kind: "xlsx" | "matrix" | "long") {
@@ -108,7 +115,7 @@ export function MeetingsView({
                 });
               }}
             >
-              <MeetingFields idPrefix="new" values={values} onChange={setValues} compact />
+              <MeetingFields idPrefix="new" values={values} onChange={setValues} today={today} compact />
               <Button type="submit" className="w-fit" disabled={pending}>
                 {pending ? "Adding…" : "Add meeting"}
               </Button>
@@ -131,7 +138,7 @@ export function MeetingsView({
           </SelectContent>
         </Select>
         <p className="mr-auto text-sm text-muted-foreground" role="status">
-          {shown.filter((m) => m.status === "held").length} held, {shown.filter((m) => m.status === "cancelled").length} cancelled
+          {held} held{upcoming > 0 && `, ${upcoming} upcoming`}, {cancelled} cancelled
         </p>
         {canImport && (
           <Button variant="outline" size="sm" asChild>
@@ -173,15 +180,17 @@ export function MeetingsView({
                   <Link href={`/attendance/${m.id}`} className="font-medium underline-offset-4 hover:underline">
                     {meetingDateLabel(m.date)}
                   </Link>
+                  {m.startTime && <div className="text-xs text-muted-foreground">{timeRange(m.startTime, m.endTime)}</div>}
                   <div className="mt-1 flex flex-wrap gap-1">
                     {m.status === "cancelled" && <Badge variant="outline">Cancelled</Badge>}
+                    {m.status === "held" && isUpcoming(m.date, today) && <Badge variant="outline">Upcoming</Badge>}
                     {m.format !== "in_person" && <Badge variant="secondary">{FORMAT_LABELS[m.format]}</Badge>}
                     {m.date === today && <Badge>Today</Badge>}
                   </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">{m.title}</TableCell>
-                <TableCell className="text-right tabular-nums">{m.status === "held" ? m.attendees : ""}</TableCell>
-                <TableCell className="text-right tabular-nums">{m.status === "held" ? m.units : ""}</TableCell>
+                <TableCell className="text-right tabular-nums">{m.status === "held" && !isUpcoming(m.date, today) ? m.attendees : ""}</TableCell>
+                <TableCell className="text-right tabular-nums">{m.status === "held" && !isUpcoming(m.date, today) ? m.units : ""}</TableCell>
               </TableRow>
             ))}
           </TableBody>

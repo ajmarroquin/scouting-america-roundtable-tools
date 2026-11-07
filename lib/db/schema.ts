@@ -10,6 +10,7 @@ import {
   pgTable,
   primaryKey,
   text,
+  time,
   timestamp,
   unique,
   uniqueIndex,
@@ -279,6 +280,9 @@ export const meeting = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     date: date("date", { mode: "string" }).notNull().unique(),
+    // Local times in APP_TIME_ZONE. Optional; self check-in opens 30 minutes before the start.
+    startTime: time("start_time"),
+    endTime: time("end_time"),
     title: text("title"),
     format: text("format").notNull().default("in_person"),
     status: text("status").notNull().default("held"),
