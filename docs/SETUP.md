@@ -123,7 +123,7 @@ Each meeting can have two reminders, a week before and the day of, that go out a
 
 Until `CRON_SECRET` is set, the Announcements page says reminders won't send.
 
-Send yourself a test from the Announcements page first, and make the first real send go to a small group that expects it, such as unit leaders.
+Send yourself a test from the Announcements page first, and make the first real send go to a small group that expects it, such as Unit Key 3.
 
 ## If something breaks
 

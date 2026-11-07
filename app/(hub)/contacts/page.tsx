@@ -6,13 +6,17 @@ import { AUDIENCES, groupKey, membershipMap } from "@/lib/announcements/audience
 import { listContacts, listUnits } from "@/lib/contacts/queries";
 import { listGroups } from "@/lib/groups/store";
 import { ContactsTable } from "./contacts-table";
+import { ContactsTabs } from "./contacts-tabs";
 
 export const metadata: Metadata = { title: "Contacts" };
 
 export default function ContactsPage({ searchParams }: PageProps<"/contacts">) {
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Contacts</h1>
+      <div className="flex flex-col gap-3">
+        <h1 className="text-2xl font-semibold">Contacts</h1>
+        <ContactsTabs active="contacts" />
+      </div>
       <Suspense fallback={<div className="h-96 animate-pulse rounded-xl bg-muted" />}>
         <ContactsData searchParams={searchParams} />
       </Suspense>

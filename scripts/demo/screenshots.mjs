@@ -193,13 +193,14 @@ await admin.getByText("Loaded", { exact: true }).waitFor();
 // This year: a virtual roundtable from a Zoom report, and one checked in at the door.
 async function newMeeting(date, topic, format) {
   await open(admin, "/roundtables");
+  await admin.getByRole("button", { name: "Add meeting" }).click();
   await admin.getByLabel("Date", { exact: true }).first().fill(date);
   await admin.getByLabel("Topic (optional)").first().fill(topic);
   if (format) {
     await admin.getByRole("combobox", { name: "Format" }).first().click();
     await admin.getByRole("option", { name: format }).click();
   }
-  await admin.getByRole("button", { name: "Add meeting" }).click();
+  await admin.getByRole("button", { name: "Save meeting" }).click();
   await admin.waitForURL(/\/roundtables\/[0-9a-f-]{36}$/);
   await admin.waitForLoadState("networkidle");
   return admin.url();
@@ -308,11 +309,12 @@ await shot(admin, "announcements");
 const zoned = (d, opts) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", ...opts }).format(d);
 const at = (minutes) => zoned(new Date(Date.now() + minutes * 60000), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 await open(admin, "/roundtables");
+await admin.getByRole("button", { name: "Add meeting" }).click();
 await admin.locator("#new-date").fill(zoned(new Date(), { year: "numeric", month: "2-digit", day: "2-digit" }));
 await admin.locator("#new-start").fill(at(-10));
 await admin.locator("#new-end").fill(at(80));
 await admin.getByLabel("Topic (optional)").first().fill("Spring program planning");
-await admin.getByRole("button", { name: "Add meeting" }).click();
+await admin.getByRole("button", { name: "Save meeting" }).click();
 await admin.waitForURL(/\/roundtables\/[0-9a-f-]{36}$/);
 await admin.getByRole("button", { name: "Show QR code and link" }).click();
 const checkInLink = await admin.locator("p.font-mono").innerText();

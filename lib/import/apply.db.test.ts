@@ -409,13 +409,26 @@ describe.skipIf(!local)("import against Postgres", () => {
     const toReach = c.units.filter((u) => u.counted && u.meetings === 0).map((u) => u.label);
     expect(toReach).toEqual(["Pack 404", "Troop 707"]);
 
-    // Outreach goes to top leaders, committee chairs, and chartered org reps only.
+    // Outreach goes to each unit's Key 3 only: the unit leader, the committee chair, and the
+    // unit rep, who can be a council unit representative instead of a chartered org rep.
     const troopB = c.units.find((u) => u.label === "Troop 101 B")!;
     const leaders = await metrics.outreachContacts([troopB.id]);
     expect(leaders.map((l) => [l.name, l.position]).sort()).toEqual([
       ["Avery Transfer", "Committee Chair"],
       ["Lex Example", "Scoutmaster"],
     ]);
+    const [pat] = await db.select().from(schema.contact).where(eq(schema.contact.lastName, "Testcase")).limit(1);
+    const added = await db
+      .insert(schema.affiliation)
+      .values([
+        { contactId: pat.id, unitId: troopB.id, position: "Council Unit Representative" },
+        { contactId: pat.id, unitId: troopB.id, position: "Committee Member" },
+      ])
+      .returning({ id: schema.affiliation.id });
+    expect((await metrics.outreachContacts([troopB.id])).filter((l) => l.contactId === pat.id).map((l) => l.position)).toEqual([
+      "Council Unit Representative",
+    ]);
+    for (const a of added) await db.delete(schema.affiliation).where(eq(schema.affiliation.id, a.id));
 
     const nov = await metrics.meetingCoverage(c.meetings[0].id, "2025-11-01");
     expect(nov).toMatchObject({ total: 6, year: "2025-26", meeting: { represented: expect.any(Array), newUnits: expect.any(Array) } });
@@ -605,7 +618,7 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(audiences.isAudienceKey(`packs,${key}`)).toBe(true);
     expect(audiences.isAudienceKey("packs,packs")).toBe(false);
     expect(audiences.isAudienceKey("packs,nobody")).toBe(false);
-    expect((await audiences.audienceInfo(`packs,${key}`))?.label).toBe("Pack leaders + Testers");
+    expect((await audiences.audienceInfo(`packs,${key}`))?.label).toBe("All Cub Scout Volunteers + Testers");
     const packs = (await audiences.audienceMembers("packs")).map((m) => m.contactId);
     const both = (await audiences.audienceMembers(`packs,${key}`)).map((m) => m.contactId);
     expect(new Set(both).size).toBe(both.length);
