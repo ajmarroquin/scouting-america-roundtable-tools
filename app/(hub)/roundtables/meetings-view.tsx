@@ -88,7 +88,7 @@ export function MeetingsView({
     <div className="flex flex-col gap-4">
       {todays && canEdit && (
         <Button size="lg" className="w-full sm:w-fit" asChild>
-          <Link href={`/attendance/${todays.id}/check-in`}>
+          <Link href={`/roundtables/${todays.id}/check-in`}>
             <UserCheckIcon /> Check people in for today&apos;s roundtable
           </Link>
         </Button>
@@ -108,10 +108,10 @@ export function MeetingsView({
                   const result = await createMeetingAction(values);
                   if (result.ok && result.id) {
                     toast.success(result.message);
-                    router.push(`/attendance/${result.id}`);
+                    router.push(`/roundtables/${result.id}`);
                   } else {
                     toast.error(result.message);
-                    if (result.id) router.push(`/attendance/${result.id}`);
+                    if (result.id) router.push(`/roundtables/${result.id}`);
                   }
                 });
               }}
@@ -143,7 +143,7 @@ export function MeetingsView({
         </p>
         {canImport && (
           <Button variant="outline" size="sm" asChild>
-            <Link href="/attendance/import">
+            <Link href="/roundtables/import">
               <FileUpIcon /> Load an old sheet
             </Link>
           </Button>
@@ -178,7 +178,7 @@ export function MeetingsView({
             {shown.map((m) => (
               <TableRow key={m.id}>
                 <TableCell>
-                  <Link href={`/attendance/${m.id}`} className="font-medium underline-offset-4 hover:underline">
+                  <Link href={`/roundtables/${m.id}`} className="font-medium underline-offset-4 hover:underline">
                     {meetingDateLabel(m.date)}
                   </Link>
                   {m.startTime && <div className="text-xs text-muted-foreground">{timeRange(m.startTime, m.endTime)}</div>}

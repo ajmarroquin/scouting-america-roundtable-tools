@@ -1,5 +1,5 @@
 // Reminders for a meeting: when they go, and the drafts to start from. Pure.
-import { fillMeeting } from "@/lib/announcements/meeting-fill";
+import { fillMeeting, meetingPreview } from "@/lib/announcements/meeting-fill";
 import { TEMPLATES } from "@/lib/announcements/editor";
 import { timeLabel } from "@/lib/attendance/schedule";
 
@@ -54,7 +54,7 @@ export function reminderDraft(kind: ReminderKind, m: ReminderMeeting): { audienc
     return {
       audience: "unit-leaders",
       subject: `Roundtable is next ${label(m.date, { weekday: "long" })}, ${label(m.date, { month: "short", day: "numeric" })}`,
-      previewText: t.previewText,
+      previewText: meetingPreview(m),
       body: fill(t.body),
     };
   }

@@ -94,3 +94,18 @@ describe("CSV export", () => {
     ]);
   });
 });
+
+describe("formatRoles", () => {
+  it("lists unit roles first, then district ones, and counts the rest", async () => {
+    const { formatRoles } = await import("./format");
+    expect(formatRoles([{ position: "Cubmaster", unit: "Pack 662" }])).toBe("Cubmaster, Pack 662");
+    expect(
+      formatRoles([
+        { position: "Unit Commissioner", unit: null },
+        { position: "Cubmaster", unit: "Pack 662" },
+        { position: "Committee Member", unit: "Troop 40" },
+      ]),
+    ).toBe("Cubmaster, Pack 662; Committee Member, Troop 40 (+1 more)");
+    expect(formatRoles([])).toBe("");
+  });
+});

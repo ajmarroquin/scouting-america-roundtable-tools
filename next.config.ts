@@ -24,6 +24,13 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  // Attendance became Roundtables: old links (bookmarks, earlier emails) still land.
+  async redirects() {
+    return [
+      { source: "/attendance", destination: "/roundtables", permanent: true },
+      { source: "/attendance/:path*", destination: "/roundtables/:path*", permanent: true },
+    ];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

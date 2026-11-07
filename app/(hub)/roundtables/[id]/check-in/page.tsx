@@ -18,7 +18,7 @@ import { CheckInBoard } from "./check-in-board";
 
 export const metadata: Metadata = { title: "Check in" };
 
-export default function CheckInPage({ params }: PageProps<"/attendance/[id]/check-in">) {
+export default function CheckInPage({ params }: PageProps<"/roundtables/[id]/check-in">) {
   return (
     <Suspense fallback={<div className="h-96 animate-pulse rounded-xl bg-muted" />}>
       <CheckInView params={params} />
@@ -26,7 +26,7 @@ export default function CheckInPage({ params }: PageProps<"/attendance/[id]/chec
   );
 }
 
-async function CheckInView({ params }: { params: PageProps<"/attendance/[id]/check-in">["params"] }) {
+async function CheckInView({ params }: { params: PageProps<"/roundtables/[id]/check-in">["params"] }) {
   const { id } = await params;
   const user = await requireUser();
   if (!z.uuid().safeParse(id).success) notFound();
@@ -38,7 +38,7 @@ async function CheckInView({ params }: { params: PageProps<"/attendance/[id]/che
   return (
     <div className="flex flex-col gap-4">
       <Link
-        href={`/attendance/${m.id}`}
+        href={`/roundtables/${m.id}`}
         className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeftIcon className="size-4" /> {meetingDateLabel(m.date)}

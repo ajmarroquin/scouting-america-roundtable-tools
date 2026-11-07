@@ -27,11 +27,11 @@ import { SelfCheckInCard } from "./self-check-in-card";
 
 export const metadata: Metadata = { title: "Meeting" };
 
-export default function MeetingPage({ params }: PageProps<"/attendance/[id]">) {
+export default function MeetingPage({ params }: PageProps<"/roundtables/[id]">) {
   return (
     <div className="flex flex-col gap-4">
-      <Link href="/attendance" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeftIcon className="size-4" /> Attendance
+      <Link href="/roundtables" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeftIcon className="size-4" /> Roundtables
       </Link>
       <Suspense fallback={<div className="h-96 animate-pulse rounded-xl bg-muted" />}>
         <MeetingView params={params} />
@@ -40,7 +40,7 @@ export default function MeetingPage({ params }: PageProps<"/attendance/[id]">) {
   );
 }
 
-async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["params"] }) {
+async function MeetingView({ params }: { params: PageProps<"/roundtables/[id]">["params"] }) {
   const { id } = await params;
   const user = await requireUser();
   if (!z.uuid().safeParse(id).success) notFound();
@@ -99,7 +99,7 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
         <div className="flex flex-wrap items-center gap-2">
           {canEdit && held && (
             <Button asChild>
-              <Link href={`/attendance/${m.id}/check-in`}>
+              <Link href={`/roundtables/${m.id}/check-in`}>
                 <UserCheckIcon /> Check people in
               </Link>
             </Button>
@@ -153,6 +153,7 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
                         <Link href={`/contacts/${p.contactId}`} className="underline-offset-4 hover:underline">
                           {p.name}
                         </Link>
+                        {p.roles && <span className="text-muted-foreground"> · {p.roles}</span>}
                       </li>
                     ))}
                   </ul>

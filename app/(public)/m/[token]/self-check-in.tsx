@@ -199,12 +199,36 @@ function Confirm({
   pending: boolean;
   onSubmit: (c: { representing: string[]; leaving: string[]; adding: Claim[] }) => void;
 }) {
-  const [representing, setRepresenting] = useState<string[]>(person.units.map((u) => u.id));
+  // Start from what they said last time tonight, or else every unit that's theirs.
+  const initial = person.representing ?? person.units.map((u) => u.id);
+  const [representing, setRepresenting] = useState<string[]>(initial);
   const [leaving, setLeaving] = useState<string[]>([]);
   const [adding, setAdding] = useState<Claim[]>([]);
+  const [editing, setEditing] = useState(!person.alreadyIn);
   const label = (id: string) => units.find((u) => u.id === id)?.label ?? person.units.find((u) => u.id === id)?.label ?? "";
-  const tonight = [...representing.map(label), ...adding.map((a) => label(a.unitId))];
+  const tonight = [...representing.map(label), ...adding.map((a) => label(a.unitId))].filter(Boolean);
   const toggle = (id: string, on: boolean) => setRepresenting((r) => (on ? [...r, id] : r.filter((x) => x !== id)));
+  const changed = leaving.length > 0 || adding.length > 0 || representing.length !== initial.length || representing.some((id) => !initial.includes(id));
+
+  // Already checked in: show what they said, and let them confirm or change it.
+  if (!editing) {
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-lg font-medium">Hi {person.firstName}. You&apos;re already checked in.</p>
+        <p className="rounded-xl bg-muted/50 p-3 text-sm">
+          {tonight.length ? `You're representing ${listUnits(tonight)} tonight.` : "You checked in without representing a unit tonight."}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="lg" disabled={pending} onClick={() => onSubmit({ representing, leaving: [], adding: [] })}>
+            Looks right
+          </Button>
+          <Button size="lg" variant="outline" disabled={pending} onClick={() => setEditing(true)}>
+            Change my units
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form
@@ -214,16 +238,13 @@ function Confirm({
         onSubmit({ representing, leaving, adding });
       }}
     >
-      <div>
-        <p className="text-lg font-medium">Hi {person.firstName}.</p>
-        {person.alreadyIn && <p className="text-sm text-muted-foreground">You&apos;re already checked in. You can update your units below.</p>}
-      </div>
+      <p className="text-lg font-medium">Hi {person.firstName}.</p>
       <p className="rounded-xl bg-muted/50 p-3 text-sm" aria-live="polite">
         {tonight.length
           ? `You're checking in and representing ${listUnits(tonight)}.`
           : person.units.length
             ? "You're checking in without representing a unit tonight."
-            : "Which unit are you representing tonight? Add it below, or check in without one."}
+            : "We don't have a unit on your record. Which unit are you representing tonight? Add it below, or check in without one."}
         {person.units.length === 1 && adding.length === 0 && representing.length === 1 && " Representing more than one? Add them below."}
       </p>
       {person.units.length > 0 && (
@@ -235,26 +256,32 @@ function Confirm({
               <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={representing.includes(u.id)} disabled={gone} onCheckedChange={(on) => toggle(u.id, on === true)} />
-                  <span className={gone ? "text-muted-foreground line-through" : ""}>{u.label}</span>
+                  <span className={gone ? "text-muted-foreground line-through" : ""}>
+                    {u.label}
+                    {u.role && <span className="text-muted-foreground"> · {u.role}</span>}
+                    {u.pending && <span className="block text-xs text-muted-foreground">Waiting to be added to your record</span>}
+                  </span>
                 </label>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground underline underline-offset-2"
-                  onClick={() => {
-                    setLeaving((l) => (gone ? l.filter((x) => x !== u.id) : [...l, u.id]));
-                    if (!gone) toggle(u.id, false);
-                  }}
-                >
-                  {gone ? "Undo" : "Not with this unit anymore"}
-                </button>
+                {!u.pending && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline underline-offset-2"
+                    onClick={() => {
+                      setLeaving((l) => (gone ? l.filter((x) => x !== u.id) : [...l, u.id]));
+                      if (!gone) toggle(u.id, false);
+                    }}
+                  >
+                    {gone ? "Undo" : "Not with this unit anymore"}
+                  </button>
+                )}
               </div>
             );
           })}
         </fieldset>
       )}
       <AddUnits units={units.filter((u) => !person.units.some((p) => p.id === u.id))} adding={adding} setAdding={setAdding} label={label} />
-      <Button type="submit" size="lg" disabled={pending}>
-        {pending ? "Checking in…" : person.alreadyIn ? "Update" : "Check me in"}
+      <Button type="submit" size="lg" disabled={pending || (person.alreadyIn && !changed)}>
+        {pending ? "Checking in…" : person.alreadyIn ? "Save changes" : "Check me in"}
       </Button>
     </form>
   );
@@ -315,7 +342,7 @@ function AddUnits({
           <PlusIcon /> Add
         </Button>
       </div>
-      {adding.length > 0 && <p className="text-xs text-muted-foreground">A volunteer confirms new units before they count.</p>}
+      {adding.length > 0 && <p className="text-xs text-muted-foreground">A volunteer will add it to your record.</p>}
     </div>
   );
 }

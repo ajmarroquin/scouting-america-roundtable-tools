@@ -77,7 +77,7 @@ export function MatchReview({
   const describe = (id: string) => {
     const p = byId.get(id);
     if (!p) return "Unknown contact";
-    const where = p.units.join(", ") || p.email || "no unit";
+    const where = p.roles || p.email || "no unit";
     return `${p.name} · ${where}${p.status === "archived" ? " (archived)" : ""}`;
   };
 

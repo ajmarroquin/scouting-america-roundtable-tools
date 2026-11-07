@@ -48,7 +48,7 @@ import {
   wrap,
 } from "@/lib/announcements/editor";
 import { renderAnnouncement } from "@/lib/announcements/render";
-import { fillMeeting } from "@/lib/announcements/meeting-fill";
+import { fillMeeting, meetingPreview, meetingSubject } from "@/lib/announcements/meeting-fill";
 import type { UpcomingMeeting } from "@/lib/attendance/queries";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import {
@@ -120,6 +120,8 @@ export function Compose({
   const [confirming, setConfirming] = useState(false);
   const [pending, start] = useTransition();
   const textarea = useRef<HTMLTextAreaElement>(null);
+  // What "For meeting" last put in the subject and preview, so picking another meeting can replace it.
+  const autoFilled = useRef({ subject: "", previewText: "" });
   const picked = audiences.find((a) => a.key === audience);
   const firstName = (sender.name || "there").split(/\s+/)[0];
   const preview = useMemo(
@@ -179,14 +181,13 @@ export function Compose({
         token = r.token;
       }
       const info = { ...m, link: `${window.location.origin}/m/${token}` };
-      if (!body.trim()) {
-        const t = TEMPLATES.find((x) => x.key === "reminder")!;
-        setBody(fillMeeting(t.body, info));
-        if (fromTemplate(subject, "subject")) setSubject(t.subject);
-        if (fromTemplate(previewText, "previewText")) setPreviewText(t.previewText);
-      } else {
-        apply((s) => ({ value: fillMeeting(s.value, info), start: s.start, end: s.end }));
-      }
+      if (!body.trim()) setBody(fillMeeting(TEMPLATES.find((x) => x.key === "reminder")!.body, info));
+      else apply((s) => ({ value: fillMeeting(s.value, info), start: s.start, end: s.end }));
+      // The subject and preview come from the meeting too, unless the sender wrote their own.
+      const auto = { subject: meetingSubject(m), previewText: meetingPreview(m) };
+      if (fromTemplate(subject, "subject") || subject === autoFilled.current.subject) setSubject(auto.subject);
+      if (fromTemplate(previewText, "previewText") || previewText === autoFilled.current.previewText) setPreviewText(auto.previewText);
+      autoFilled.current = auto;
       toast.success(`Filled in from ${meetingDateLabel(m.date)}. The button goes to its RSVP and check-in page.`);
     });
   }

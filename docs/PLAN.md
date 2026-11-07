@@ -70,7 +70,7 @@ app/
   (hub)/layout.tsx        auth gate + nav built from the tool registry
   (hub)/page.tsx          hub home: tool cards and quick stats
   (hub)/contacts/
-  (hub)/attendance/
+  (hub)/roundtables/
   (hub)/admin/            users, import log, settings, full backup
 lib/
   auth/                   Better Auth config, requireRole()
@@ -247,9 +247,9 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
 
 ## Phase 3, part 1: what was built
 
-- **Meetings** (`/attendance`): one per date, held or cancelled, in person, virtual, or hybrid, with an optional topic and start and end times (local to `APP_TIME_ZONE`; a new meeting starts with the latest meeting's times, or 7:00 to 8:30 pm). Listed by scouting year (September to August) with people and units counted per meeting. Editors add and edit; deleting a meeting, which takes its check-ins, is admin-only.
+- **Roundtables** (`/roundtables`, called Attendance until November 2026; `/attendance` links redirect): one per date, held or cancelled, in person, virtual, or hybrid, with an optional topic and start and end times (local to `APP_TIME_ZONE`; a new meeting starts with the latest meeting's times, or 7:00 to 8:30 pm). Listed by scouting year (September to August) with people and units counted per meeting. Editors add and edit; deleting a meeting, which takes its check-ins, is admin-only.
   - **Upcoming meetings** (`lib/attendance/schedule.ts`): the whole year can go on the calendar ahead of time. A meeting dated after today shows as Upcoming ("Scheduled" in the editor), takes no check-ins until its day, and is left out of held counts, coverage, the council report, each person's record, and exports until then.
-- **Check-in** (`/attendance/[id]/check-in`, editors): built for a phone at the door. Search by name, preferred name, or unit; tap to check in, tap again to undo; the search clears after each check-in. "Add a walk-in" prefills the name from the search and checks them in. A walk-in who's already a contact (same email and first name) is just checked in.
+- **Check-in** (`/roundtables/[id]/check-in`, editors): built for a phone at the door. Search by name, preferred name, or unit; tap to check in, tap again to undo; the search clears after each check-in. "Add a walk-in" prefills the name from the search and checks them in. A walk-in who's already a contact (same email and first name) is just checked in.
 - **Meeting page**: who came, what unit each represented, and how they were checked in. A person in several units counts for all of them unless an editor picks the one they came for.
 - **Exports**: per scouting year, the old sheet's shape (people by meetings, "Attended", headcount row) and one row per check-in, as CSV or one Excel workbook; per meeting, a CSV.
 
@@ -257,7 +257,7 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
 
 - **Name matching** (`lib/attendance/match.ts`): matches a typed name to a contact by first and preferred name, nicknames (Jim and James), accents, compound last names (Del Rosario), small typos, and email. A unit named on the sheet breaks ties. Only a confident, unambiguous match is taken on its own; a first name alone, a last initial, or a close spelling goes to review.
 - **Review step** (shared): confident matches are picked; guesses wait until someone picks or takes the best guesses; "Someone else…" searches all contacts; unknown names are added as new contacts or skipped.
-- **Load an old sheet** (`/attendance/import`, admins): a CSV download or cells pasted from Google Sheets. Reads the Name column (or first and last), the Unit column, and one column per meeting headed by a month ("Nov 25") or a date; other columns become notes on new contacts.
+- **Load an old sheet** (`/roundtables/import`, admins): a CSV download or cells pasted from Google Sheets. Reads the Name column (or first and last), the Unit column, and one column per meeting headed by a month ("Nov 25") or a date; other columns become notes on new contacts.
   - A month heading becomes the 1st of the month unless a meeting that month is already in the app; dates are editable.
   - Empty past months default to cancelled, empty future months to "don't load", and a meeting already in the app keeps its status.
   - New people are walk-ins. They get the units the sheet names as "Adult member", but only units already in the app that the text picks out without doubt ("troop 1 b, g" is Troop 1 B and Troop 1 G; "Troop 1" with both is left alone and noted).
@@ -357,6 +357,13 @@ Built as planned (migration 0011 `rsvp`). The page takes RSVPs from when the lin
 - After answering yes: the join link for virtual or hybrid meetings, and an "Add to calendar" .ics file.
 - Meeting page (editors): RSVP counts and the list. The check-in board marks who said yes, to speed up the door.
 - Audiences for each upcoming meeting: "Said yes to Nov 19" and "Hasn't answered for Nov 19", for reminders.
+
+### After testing (built)
+
+- **Self check-in**: units show with the person's roles ("Pack 662 · Cubmaster"), earlier claims carry forward as "waiting to be added to your record", and someone already checked in sees "You're representing Pack 662 tonight" with **Looks right** or **Change my units**. A unit claimed by someone who matched a contact counts at once; the review only asks whether to add it to their record ("Add to record" or "Not with this unit", which also takes it off the count). A new person's units count once they're approved.
+- **Roles next to names**: every list of people (review, RSVPs, attendees, door check-in search, who's in it, the merge picker, pasted-list matches) shows their roles, from `lib/contacts/roles.ts`, so people are easy to tell apart.
+- **Roundtables**: the Attendance tool is now Roundtables, first on the home page, then Announcements, Contacts, Units, Council report, and Users.
+- **Announcements**: "For meeting" sets the subject ("Roundtable: Monday, Nov 9 at 6:30 pm") and preview line from the meeting; hybrid meetings read "at St. Mark's Hall, and online for anyone who can't make it in person".
 
 ### 6D. Reminders (built)
 

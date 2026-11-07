@@ -4,6 +4,7 @@ import { compareUnits, contactName, unitLabel } from "@/lib/contacts/format";
 import { db } from "@/lib/db";
 import { affiliation, attendance, contact, meeting, unit } from "@/lib/db/schema";
 import type { ExportAttendance, ExportMeeting } from "./export";
+import { rolesFor } from "@/lib/contacts/roles";
 import { confirmedUnits } from "./confirmed";
 import { appTimeZone, appToday } from "./today";
 import { personRecord } from "./trends";
@@ -35,9 +36,12 @@ export type Attendee = {
   email: string | null;
   isYouth: boolean;
   units: UnitRef[];
+  roles: string;
   representedUnitId: string | null;
   /** Set when they said at self check-in which units they represent (approved ones). */
   confirmedUnitIds: string[] | null;
+  /** Those units' labels, including ones not on their record yet. */
+  confirmedLabels: string[];
   /** Added themselves at self check-in and waiting for an editor. */
   pendingReview: boolean;
   method: string;
@@ -52,6 +56,8 @@ export type CheckInPerson = {
   preferredName: string | null;
   email: string | null;
   units: string[];
+  /** Their roles, to tell people with similar names apart: "Cubmaster, Pack 662". */
+  roles: string;
   status: string;
 };
 
@@ -115,7 +121,11 @@ export async function getMeeting(id: string) {
     .innerJoin(contact, eq(attendance.contactId, contact.id))
     .where(eq(attendance.meetingId, id))
     .orderBy(asc(contact.lastName), asc(contact.firstName));
-  const [units, confirmed] = await Promise.all([unitsByContact(rows.map((r) => r.c.id)), confirmedUnits(rows.map((r) => r.a))]);
+  const [units, confirmed, roles] = await Promise.all([
+    unitsByContact(rows.map((r) => r.c.id)),
+    confirmedUnits(rows.map((r) => r.a)),
+    rolesFor(rows.map((r) => r.c.id)),
+  ]);
   const attendees: Attendee[] = rows.map(({ a, c }) => ({
     attendanceId: a.id,
     contactId: c.id,
@@ -123,8 +133,10 @@ export async function getMeeting(id: string) {
     email: c.email,
     isYouth: c.isYouth,
     units: units.get(c.id) ?? [],
+    roles: roles.get(c.id) ?? "",
     representedUnitId: a.unitId,
     confirmedUnitIds: confirmed.get(a.id) ?? null,
+    confirmedLabels: [],
     pendingReview: c.pendingReview,
     method: a.method,
     checkedInAt: a.checkedInAt.toISOString(),
@@ -133,6 +145,8 @@ export async function getMeeting(id: string) {
     attendees.map((a) => ({ representedUnitId: a.representedUnitId, unitIds: a.units.map((u) => u.id), confirmedUnitIds: a.confirmedUnitIds })),
   );
   const allUnits = represented.size ? await db.select().from(unit).where(inArray(unit.id, [...represented])) : [];
+  const labelOf = new Map(allUnits.sort(compareUnits).map((u) => [u.id, unitLabel(u)]));
+  for (const a of attendees) a.confirmedLabels = [...labelOf].filter(([id]) => a.confirmedUnitIds?.includes(id)).map(([, label]) => label);
   return {
     meeting: m,
     attendees,
@@ -155,7 +169,7 @@ export async function checkInPeople(opts: { includeArchived?: boolean } = {}): P
     .from(contact)
     .where(opts.includeArchived ? undefined : ne(contact.status, "archived"))
     .orderBy(asc(contact.lastName), asc(contact.firstName));
-  const units = await unitsByContact(rows.map((r) => r.id));
+  const [units, roles] = await Promise.all([unitsByContact(rows.map((r) => r.id)), rolesFor(rows.map((r) => r.id))]);
   return rows.map((c) => ({
     id: c.id,
     name: contactName(c),
@@ -164,6 +178,7 @@ export async function checkInPeople(opts: { includeArchived?: boolean } = {}): P
     preferredName: c.preferredName,
     email: c.email,
     units: (units.get(c.id) ?? []).map((u) => u.label),
+    roles: roles.get(c.id) ?? "",
     status: c.status,
   }));
 }

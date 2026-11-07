@@ -31,3 +31,14 @@ export const SOURCE_LABELS: Record<string, string> = {
   walk_in: "Walk-in",
   self_check_in: "Added themselves at check-in",
 };
+
+/**
+ * Someone's roles, to show next to their name so people are easy to tell apart:
+ * "Cubmaster, Pack 662; Committee Member, Troop 40 (+1 more)". Unit roles first.
+ */
+export function formatRoles(roles: { position: string; unit: string | null }[], max = 2): string {
+  const sorted = [...roles].sort((a, b) => Number(!a.unit) - Number(!b.unit));
+  const shown = sorted.slice(0, max).map((r) => (r.unit ? `${r.position}, ${r.unit}` : r.position));
+  const more = sorted.length - shown.length;
+  return shown.join("; ") + (more > 0 ? ` (+${more} more)` : "");
+}

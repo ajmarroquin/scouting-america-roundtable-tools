@@ -674,7 +674,10 @@ describe.skipIf(!local)("import against Postgres", () => {
     const person = (found as { person: import("@/lib/selfcheckin/service").Person }).person;
     expect(person.units.length).toBeGreaterThan(0);
     // Only a first name and unit labels come back.
-    expect(Object.keys(person).sort()).toEqual(["alreadyIn", "contactId", "firstName", "rsvp", "units"]);
+    expect(Object.keys(person).sort()).toEqual(["alreadyIn", "contactId", "firstName", "representing", "rsvp", "units"]);
+    // Each unit comes with their role there, so they can confirm it at a glance.
+    expect(person.units[0]).toMatchObject({ pending: false, role: expect.any(String) });
+    expect(person.units[0].role!.length).toBeGreaterThan(0);
 
     // A family email shared by Pat and Sam: pick by first name.
     const pat = (await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Pat")))[0];
@@ -694,13 +697,25 @@ describe.skipIf(!local)("import against Postgres", () => {
     const mine = person.units[0];
     const other = units.find((u) => !person.units.some((p) => p.id === u.id))!;
     const done = await sci.confirm(token, { ...who, contactId: alex.id, representing: [mine.id], leaving: [], adding: [{ unitId: other.id, role: "Den Leader" }] }, ip, open);
-    expect(done).toMatchObject({ ok: true, message: expect.stringContaining("A volunteer will update your units") });
+    expect(done).toMatchObject({ ok: true, message: expect.stringContaining("A volunteer will update your record") });
+    // Alex matched a contact, so the claimed unit counts now; the review is only about the record.
     let m = await queries.getMeeting(meetingId);
-    expect(m!.unitsRepresented.map((u) => u.id)).toEqual([mine.id]);
-    expect(m!.attendees[0]).toMatchObject({ method: "self_check_in", confirmedUnitIds: [mine.id] });
+    expect(m!.unitsRepresented.map((u) => u.id).sort()).toEqual([mine.id, other.id].sort());
+    expect(m!.attendees[0]).toMatchObject({ method: "self_check_in" });
+    expect(m!.attendees[0].confirmedLabels.sort()).toEqual([mine.label, other.label].sort());
+    expect(m!.attendees[0].roles.length).toBeGreaterThan(0);
 
     let reviews = await sci.openReviews(meetingId);
-    expect(reviews.map((r) => [r.kind, r.unitLabel, r.role])).toEqual([["add_unit", other.label, "Den Leader"]]);
+    expect(reviews.map((r) => [r.kind, r.unitLabel, r.role, r.newPerson])).toEqual([["add_unit", other.label, "Den Leader", false]]);
+
+    // Checking in again starts from what they said, shows the claim as waiting, and doesn't duplicate or drop it.
+    const again = (await sci.identify(token, who, ip, open)) as { person: import("@/lib/selfcheckin/service").Person };
+    expect(again.person).toMatchObject({ alreadyIn: true });
+    expect(again.person.representing!.sort()).toEqual([mine.id, other.id].sort());
+    expect(again.person.units.find((u) => u.id === other.id)).toMatchObject({ pending: true, role: "Den Leader" });
+    await sci.confirm(token, { ...who, contactId: alex.id, representing: again.person.representing!, leaving: [], adding: [] }, ip, open);
+    expect((await sci.openReviews(meetingId)).map((r) => [r.kind, r.unitLabel])).toEqual([["add_unit", other.label]]);
+    expect((await queries.getMeeting(meetingId))!.unitsRepresented.map((u) => u.id).sort()).toEqual([mine.id, other.id].sort());
     expect(await sci.approveReview(actor, reviews[0].id)).toMatchObject({ ok: true });
     expect(await sci.approveReview(actor, reviews[0].id)).toMatchObject({ ok: false });
     m = await queries.getMeeting(meetingId);

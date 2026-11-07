@@ -72,13 +72,13 @@ export function AttendeesTable({ attendees, canEdit, meetingId }: { attendees: A
                   To review
                 </Badge>
               )}
-              <div className="text-xs text-muted-foreground">{a.email}</div>
+              <div className="text-xs text-muted-foreground">{[a.roles, a.email].filter(Boolean).join(" · ")}</div>
             </TableCell>
             <TableCell className="align-top">
               {a.confirmedUnitIds ? (
                 // They said which units at self check-in; claims count once approved.
                 <span className="text-sm">
-                  {a.units.filter((u) => a.confirmedUnitIds!.includes(u.id)).map((u) => u.label).join(", ") || (
+                  {a.confirmedLabels.join(", ") || (
                     <span className="text-muted-foreground">No unit tonight</span>
                   )}
                 </span>
@@ -210,7 +210,7 @@ export function DeleteMeetingButton({ meetingId, checkIns }: { meetingId: string
           start(async () => {
             const result = await deleteMeetingAction(meetingId);
             report(result);
-            if (result.ok) router.push("/attendance");
+            if (result.ok) router.push("/roundtables");
           })
         }
       >
