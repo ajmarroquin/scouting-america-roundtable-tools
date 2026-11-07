@@ -61,7 +61,8 @@ export function MeetingsView({
   const todays = meetings.find((m) => m.date === today && m.status === "held");
   const [values, setValues] = useState<MeetingValues>(() => {
     const times = suggestedTimes(meetings);
-    return { date: today, startTime: times.start, endTime: times.end, title: "", format: "in_person", status: "held", notes: "" };
+    const last = [...meetings].filter((m) => m.place).sort((a, b) => b.date.localeCompare(a.date))[0];
+    return { date: today, startTime: times.start, endTime: times.end, title: "", place: last?.place ?? "", joinUrl: "", format: "in_person", status: "held", notes: "" };
   });
   const held = shown.filter((m) => m.status === "held" && !isUpcoming(m.date, today)).length;
   const upcoming = shown.filter((m) => m.status === "held" && isUpcoming(m.date, today)).length;

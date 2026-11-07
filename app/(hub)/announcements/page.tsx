@@ -13,6 +13,7 @@ import { audienceOptions } from "@/lib/announcements/audiences";
 import { senderEmail } from "@/lib/announcements/brand";
 import { getBrand } from "@/lib/announcements/brand-store";
 import { listAnnouncements, unsubscribedCount } from "@/lib/announcements/send";
+import { upcomingMeetings } from "@/lib/attendance/queries";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { senderAddress } from "@/lib/email/sender";
@@ -46,7 +47,13 @@ const dateTime = (d: Date) =>
 async function AnnouncementsData() {
   const user = await requireUser();
   if (!hasRole(user.role, "admin")) return <p className="text-sm text-muted-foreground">Only admins can send announcements.</p>;
-  const [audiences, history, unsubscribed, brand] = await Promise.all([audienceOptions(), listAnnouncements(), unsubscribedCount(), getBrand()]);
+  const [audiences, history, unsubscribed, brand, meetings] = await Promise.all([
+    audienceOptions(),
+    listAnnouncements(),
+    unsubscribedCount(),
+    getBrand(),
+    upcomingMeetings(),
+  ]);
   const fromEmail = senderEmail(senderAddress(process.env));
   return (
     <>
@@ -55,6 +62,7 @@ async function AnnouncementsData() {
         sender={{ name: user.name, email: user.email }}
         brand={brand}
         fromEmail={fromEmail}
+        meetings={meetings}
       />
       <Unsubscribes count={unsubscribed} />
       <section className="flex flex-col gap-2">

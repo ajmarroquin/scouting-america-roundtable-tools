@@ -220,7 +220,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
 | 4. Metrics (built) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements (built) | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
-| 6. Meeting page (6A built) | Self check-in at the door, meeting place and join link, filling announcements from a meeting, RSVP, reminders | M to L | A public page in front of a private roster |
+| 6. Meeting page (6A and 6B built) | Self check-in at the door, meeting place and join link, filling announcements from a meeting, RSVP, reminders | M to L | A public page in front of a private roster |
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
 
@@ -339,7 +339,10 @@ Built as planned: `app/(public)/m/[token]` with `lib/selfcheckin/rules.ts` (wind
 - **Editor tools** on the meeting page: a Self check-in card with the window ("Opens at 6:30 pm", "Open now", "Closed"), the QR code drawn in the browser (the `qrcode` package; never an outside QR service, which would see the token), copy link, and reset link. The check-in board tags self check-ins and refreshes every 15 seconds while the window is open.
 - **Tests**: pure tests for the window and matching normalization. DB tests for a match, no match, youth and archived never matched, a shared family email, idempotent check-in, a claim pending until approved and counted after, a removal, "it's actually...", outside-window and reset-token refusals, and rate limits. A browser check on a phone viewport.
 
-### 6B. Meeting place and join link, and filling an announcement from a meeting
+### 6B. Meeting place and join link, and filling an announcement from a meeting (built)
+
+Built as planned (migration 0010, `lib/announcements/meeting-fill.ts`). An empty message starts from the reminder template when a meeting is picked. Until 6C, the button's page is the check-in page, which says when check-in opens.
+
 
 - `meeting.place` (text) and `meeting.join_url` (https only), edited with the other meeting fields and shown on the meeting page. On the public page the join link appears only after someone is matched or RSVPs, so posting the QR code doesn't hand out the Zoom link.
 - In Announcements, a "For meeting" picker of upcoming meetings fills the template's blanks in the text itself, where the sender can still edit them: `[day, date]`, `[date]`, `[time]`, and `[place]` ("on Zoom" for virtual, "at the library or on Zoom" for hybrid), and a button with no address gets the meeting's RSVP link (making the token if needed). The draft warnings then clear on their own.

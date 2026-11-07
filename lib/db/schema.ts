@@ -287,6 +287,9 @@ export const meeting = pgTable(
     endTime: time("end_time"),
     // The self check-in link (/m/<token>). Made when an editor first shows the QR code; reset if it spreads.
     publicToken: text("public_token").unique(),
+    // Where it is, and the video link for virtual and hybrid meetings (https only).
+    place: text("place"),
+    joinUrl: text("join_url"),
     title: text("title"),
     format: text("format").notNull().default("in_person"),
     status: text("status").notNull().default("held"),

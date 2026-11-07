@@ -71,6 +71,13 @@
       "when": 1794073663115,
       "tag": "0009_self_check_in",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794074482585,
+      "tag": "0010_meeting_place",
+      "breakpoints": true
     }
   ]
 }

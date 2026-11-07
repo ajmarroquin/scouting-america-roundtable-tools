@@ -34,6 +34,14 @@ const meetingSchema = z
     startTime: clock,
     endTime: clock,
     title: optionalText(120),
+    place: optionalText(200).optional().transform((v) => v ?? null),
+    joinUrl: z
+      .string()
+      .trim()
+      .max(500)
+      .refine((v) => v === "" || /^https:\/\/[^\s"'<>]+$/.test(v), "The join link needs to start with https://")
+      .optional()
+      .transform((v) => v || null),
     format: z.enum(MEETING_FORMATS),
     status: z.enum(MEETING_STATUSES),
     notes: optionalText(2000),

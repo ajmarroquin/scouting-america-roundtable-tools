@@ -7,6 +7,7 @@ import { audienceRoster, isAudienceKey, type RosterPerson } from "@/lib/announce
 import { saveBrand } from "@/lib/announcements/brand-store";
 import type { Reach } from "@/lib/announcements/reach";
 import { emailFailureReason } from "@/lib/email/errors";
+import { ensureToken } from "@/lib/selfcheckin/service";
 
 type Result = { ok: boolean; message: string };
 
@@ -61,4 +62,15 @@ export async function audienceRosterAction(key: string): Promise<{ ok: true; ros
   }
   if (typeof key !== "string" || !isAudienceKey(key)) return { ok: false, message: "Pick who it goes to." };
   return { ok: true, roster: await audienceRoster(key) };
+}
+
+/** The meeting's public page token, for a button that links to it. */
+export async function meetingLinkAction(meetingId: string): Promise<{ ok: true; token: string } | { ok: false; message: string }> {
+  try {
+    const actor = await requireRole("admin");
+    return await ensureToken(actor, String(meetingId));
+  } catch (error) {
+    if (error instanceof NotAllowedError) return { ok: false, message: error.message };
+    throw error;
+  }
 }

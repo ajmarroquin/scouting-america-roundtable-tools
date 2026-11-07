@@ -38,6 +38,7 @@ async function MeetingPublic({ params }: { params: PageProps<"/m/[token]">["para
         <h1 className="text-2xl font-semibold">{meetingDateLabel(m.date)}</h1>
         {time && <p className="text-lg">{time}</p>}
         {m.title && <p className="text-muted-foreground">{m.title}</p>}
+        {m.place && <p className="text-sm text-muted-foreground">{m.place}</p>}
         {m.format !== "in_person" && <p className="text-sm text-muted-foreground">{FORMAT_LABELS[m.format]}</p>}
       </header>
       {w.state === "open" ? (

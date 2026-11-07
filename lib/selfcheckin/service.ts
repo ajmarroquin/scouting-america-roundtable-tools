@@ -26,6 +26,9 @@ export type PublicMeeting = {
   endTime: string | null;
   title: string | null;
   format: string;
+  place: string | null;
+  /** Never put on the page: given out only after someone checks in. */
+  joinUrl: string | null;
   window: WindowState;
 };
 
@@ -38,7 +41,7 @@ export type IdentifyResult =
   | { ok: true; kind: "choose"; people: { contactId: string; firstName: string }[] }
   | { ok: true; kind: "match"; person: Person };
 
-type Done = { ok: boolean; message: string };
+type Done = { ok: boolean; message: string; joinUrl?: string | null };
 
 export async function publicMeeting(token: string, now = new Date()): Promise<PublicMeeting | null> {
   if (!TOKEN.test(token)) return null;
@@ -51,6 +54,8 @@ export async function publicMeeting(token: string, now = new Date()): Promise<Pu
     endTime: m.endTime,
     title: m.title,
     format: m.format,
+    place: m.place,
+    joinUrl: m.format === "in_person" ? null : m.joinUrl,
     window: checkInWindow(m, now, appTimeZone()),
   };
 }
@@ -196,6 +201,7 @@ export async function confirm(token: string, raw: unknown, ip: string, now = new
   const name = person.preferredName || person.firstName;
   return {
     ok: true,
+    joinUrl: g.meeting.joinUrl,
     message: adding.length || leaving.length
       ? `You're checked in, ${name}. Thanks for coming! A volunteer will update your units.`
       : `You're checked in, ${name}. Thanks for coming!`,
@@ -272,7 +278,7 @@ export async function registerNew(token: string, raw: unknown, ip: string, now =
     const theirs = await unitsOf(existing[0].id);
     const ids = new Set(theirs.map((u) => u.id));
     await record(g.meeting.id, existing[0].id, [...ids], adding.filter((a) => !ids.has(a.unitId)), []);
-    return { ok: true, message: `You're checked in, ${input.firstName}. Thanks for coming!` };
+    return { ok: true, message: `You're checked in, ${input.firstName}. Thanks for coming!`, joinUrl: g.meeting.joinUrl };
   }
 
   const [created] = await db
@@ -281,7 +287,7 @@ export async function registerNew(token: string, raw: unknown, ip: string, now =
     .returning({ id: contact.id });
   await writeAudit(null, "contact.self_add", { type: "contact", id: created.id }, { meetingId: g.meeting.id });
   await record(g.meeting.id, created.id, [], adding, [], true);
-  return { ok: true, message: `You're checked in, ${input.firstName}. Welcome! A volunteer will add you to our list.` };
+  return { ok: true, message: `You're checked in, ${input.firstName}. Welcome! A volunteer will add you to our list.`, joinUrl: g.meeting.joinUrl };
 }
 
 // ---- Editors: the link and the review list -------------------------------

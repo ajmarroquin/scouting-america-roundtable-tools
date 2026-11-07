@@ -18,6 +18,8 @@ export type MeetingValues = {
   startTime: string;
   endTime: string;
   title: string;
+  place: string;
+  joinUrl: string;
   format: "in_person" | "virtual" | "hybrid";
   status: "held" | "cancelled";
   notes: string;
@@ -98,6 +100,29 @@ export function MeetingFields({
           </SelectContent>
         </Select>
       </div>
+      <div className="flex flex-col gap-2 lg:col-span-2">
+        <Label htmlFor={`${idPrefix}-place`}>{values.format === "virtual" ? "Place (none for online only)" : "Place"}</Label>
+        <Input
+          id={`${idPrefix}-place`}
+          maxLength={200}
+          placeholder="For example, St. Mark's Hall, 123 Main St"
+          value={values.place}
+          onChange={(e) => set({ place: e.target.value })}
+        />
+      </div>
+      {values.format !== "in_person" && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`${idPrefix}-join`}>Join link</Label>
+          <Input
+            id={`${idPrefix}-join`}
+            type="url"
+            maxLength={500}
+            placeholder="https://zoom.us/j/…"
+            value={values.joinUrl}
+            onChange={(e) => set({ joinUrl: e.target.value })}
+          />
+        </div>
+      )}
       {!compact && (
         <>
           <div className="flex flex-col gap-2">
