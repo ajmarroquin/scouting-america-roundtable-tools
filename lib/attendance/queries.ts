@@ -4,7 +4,9 @@ import { compareUnits, contactName, unitLabel } from "@/lib/contacts/format";
 import { db } from "@/lib/db";
 import { affiliation, attendance, contact, meeting, unit } from "@/lib/db/schema";
 import type { ExportAttendance, ExportMeeting } from "./export";
+import { personRecord } from "./trends";
 import { unitsRepresented } from "./units";
+import { scoutingYearOf, todayIn, yearRange } from "./year";
 
 export type UnitRef = { id: string; label: string };
 
@@ -174,4 +176,30 @@ export async function attendanceForExport(range?: { start: string; end: string }
 
 export function appTimeZone(): string {
   return process.env.APP_TIME_ZONE || "America/New_York";
+}
+
+/** One person's roundtables: this year's count, the last one, the current streak, and the list. */
+export async function contactRecord(contactId: string) {
+  const [held, mine] = await Promise.all([
+    db
+      .select({ id: meeting.id, date: meeting.date, title: meeting.title })
+      .from(meeting)
+      .where(eq(meeting.status, "held"))
+      .orderBy(asc(meeting.date)),
+    db
+      .select({ meetingId: attendance.meetingId, method: attendance.method })
+      .from(attendance)
+      .where(eq(attendance.contactId, contactId)),
+  ]);
+  const year = scoutingYearOf(todayIn(appTimeZone()));
+  const attended = new Set(mine.map((m) => m.meetingId));
+  const method = new Map(mine.map((m) => [m.meetingId, m.method]));
+  return {
+    year,
+    record: personRecord(held, attended, yearRange(year)),
+    meetings: held
+      .filter((m) => attended.has(m.id))
+      .reverse()
+      .map((m) => ({ ...m, method: method.get(m.id) ?? "check_in" })),
+  };
 }

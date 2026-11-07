@@ -417,4 +417,26 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(nov).toMatchObject({ total: 6, year: "2025-26", meeting: { represented: expect.any(Array), newUnits: expect.any(Array) } });
     expect(nov.meeting!.newUnits).toHaveLength(3);
   });
+
+  it("adds trends: people new and returning, same month last year, coverage by program, and a person's record", async () => {
+    const metrics = await import("@/lib/attendance/metrics");
+    const queries = await import("@/lib/attendance/queries");
+    const c = await metrics.coverageForYear("2026-27");
+    // 2026-27 so far: Alex and Zoe at the January virtual meeting. 2025-26 had 7 people from the old sheet.
+    expect(c.trends.lastYear).toBe("2025-26");
+    expect(c.trends.people).toEqual({ people: 2, newPeople: 1, returning: 1, lastYearPeople: 7, retention: 14 });
+    const jan = c.meetings.find((m) => m.date === "2027-01-21")!;
+    expect(c.trends.sameMonth[jan.id]).toBe(3);
+    expect(c.trends.programs).toEqual([
+      { type: "Pack", counted: 2, represented: 1, percent: 50 },
+      { type: "Troop", counted: 3, represented: 1, percent: 33 },
+      { type: "Crew", counted: 1, represented: 0, percent: 0 },
+    ]);
+
+    const [alex] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
+    const history = await queries.contactRecord(alex.id);
+    expect(history.meetings.map((m) => m.date)).toEqual(["2027-01-21", "2026-04-01", "2026-01-15", "2025-11-01"]);
+    expect(history.record).toMatchObject({ last: "2027-01-21", streak: 1 });
+    expect(history.meetings[0].method).toBe("pasted_list");
+  });
 });

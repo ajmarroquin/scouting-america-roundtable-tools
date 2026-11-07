@@ -24,11 +24,12 @@ import type { Leader, YearCoverage } from "@/lib/attendance/metrics";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import { downloadCsv, downloadXlsx } from "@/lib/export/download";
 import { CopyEmails } from "../contacts/copy-emails";
-import { Progress } from "../progress";
+import { Kpi, Progress } from "../progress";
 import { YearSelect } from "../year-select";
 
 export function CouncilReport({ coverage: c, years, leaders }: { coverage: YearCoverage; years: string[]; leaders: Leader[] }) {
   const pct = percent(c.represented, c.total);
+  const t = c.trends;
   const counted = c.units.filter((u) => u.counted);
   const toReach = counted.filter((u) => u.meetings === 0);
   const name = (ids: string[]) => ids.map((id) => c.labels[id] ?? "Unknown unit").join(", ");
@@ -39,11 +40,12 @@ export function CouncilReport({ coverage: c, years, leaders }: { coverage: YearC
       : `the ${c.total} active units from the roster (no unit list loaded yet)`;
 
   const byMeeting = {
-    headers: ["Date", "Topic", "People", "First time this year", "Units", "% of units", "Year so far", "% year so far", "New units", "Not on unit list"],
+    headers: ["Date", "Topic", "People", `Same month ${c.trends.lastYear}`, "First time this year", "Units", "% of units", "Year so far", "% year so far", "New units", "Not on unit list"],
     rows: c.meetings.map((m) => [
       m.date,
       m.title ?? "",
       m.headcount,
+      c.trends.sameMonth[m.id] ?? "",
       m.firstTimers,
       m.represented.length,
       percent(m.represented.length, c.total),
@@ -75,13 +77,23 @@ export function CouncilReport({ coverage: c, years, leaders }: { coverage: YearC
       ["Units still to reach", toReach.length],
       ["Held roundtables", c.meetings.length],
       ["Check-ins", c.meetings.reduce((n, m) => n + m.headcount, 0)],
+      ["Different people", t.people.people],
+      ["New people (first roundtable ever)", t.people.newPeople],
+      [`Back from ${t.lastYear}`, t.people.returning],
+      [`People in ${t.lastYear}`, t.people.lastYearPeople],
+      ["Retention (%)", t.people.retention],
     ],
+  };
+  const byProgram = {
+    headers: ["Program", "Units counted", "Units reached", "% reached"],
+    rows: t.programs.map((p) => [`${p.type}s`, p.counted, p.represented, p.percent]),
   };
 
   async function exportAll() {
     await downloadXlsx(`council-report-${c.year}.xlsx`, [
       { name: "Summary", ...summary },
       { name: "By roundtable", ...byMeeting },
+      { name: "By program", ...byProgram },
       { name: "By unit", ...byUnit },
       { name: "Still to reach", ...outreach },
     ]);
@@ -124,6 +136,44 @@ export function CouncilReport({ coverage: c, years, leaders }: { coverage: YearC
           </p>
         </CardContent>
       </Card>
+
+      <section className="flex flex-col gap-2" aria-label="Trends">
+        <h2 className="text-lg font-medium">Trends</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Kpi
+            label="Different people this year"
+            value={String(t.people.people)}
+            detail={`${t.people.newPeople} at their first roundtable ever`}
+          />
+          <Kpi
+            label={`Back from ${t.lastYear}`}
+            value={t.people.lastYearPeople ? `${t.people.retention}%` : "No data"}
+            progress={t.people.lastYearPeople ? t.people.retention : undefined}
+            detail={
+              t.people.lastYearPeople
+                ? `${t.people.returning} of ${t.people.lastYearPeople} people from last year came back`
+                : `No roundtables recorded in ${t.lastYear}`
+            }
+          />
+          {t.programs.slice(0, 2).map((p) => (
+            <Kpi
+              key={p.type}
+              label={`${p.type}s reached`}
+              value={`${p.represented} of ${p.counted}`}
+              progress={p.percent}
+              detail={`${p.percent}% of ${p.type.toLowerCase()}s`}
+            />
+          ))}
+        </div>
+        {t.programs.length > 2 && (
+          <p className="text-sm text-muted-foreground">
+            {t.programs
+              .slice(2)
+              .map((p) => `${p.type}s: ${p.represented} of ${p.counted}`)
+              .join(" · ")}
+          </p>
+        )}
+      </section>
 
       <section className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -184,6 +234,7 @@ export function CouncilReport({ coverage: c, years, leaders }: { coverage: YearC
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead className="text-right">People</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Same month {t.lastYear}</TableHead>
                 <TableHead className="text-right">Units</TableHead>
                 <TableHead className="text-right">Year so far</TableHead>
                 <TableHead className="hidden md:table-cell">New units</TableHead>
@@ -198,6 +249,9 @@ export function CouncilReport({ coverage: c, years, leaders }: { coverage: YearC
                     </Link>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{m.headcount}</TableCell>
+                  <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
+                    {t.sameMonth[m.id] ?? "None"}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {m.represented.length} <span className="text-xs text-muted-foreground">({percent(m.represented.length, c.total)}%)</span>
                   </TableCell>

@@ -218,7 +218,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 1. Contacts (built) | Units, contacts, affiliations; filters; copy emails; manual youth with parent email; CSV and XLSX export | M | Low |
 | 2. Import (built) | Roster parser, youth and district filters, dedupe, preview, save, log. Fuzzy review queue moves to Phase 3, where walk-ins and the legacy sheets need it. | L | Fuzzy match quality |
 | 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
-| 4. Metrics (units tool and coverage built; trends next) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
+| 4. Metrics (built) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
@@ -285,6 +285,16 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
   - **By roundtable**: people, units, and the running total with percentages, and the units new at each one.
   - **By unit**: roundtables attended and the last one, including units not on the list.
   - **Export**: one Excel workbook (Summary, By roundtable, By unit, Still to reach) or CSVs.
+
+## Phase 4, part 3: what was built
+
+- **Trends** (`lib/attendance/trends.ts`, pure and tested), on the council report:
+  - Different people this year, and how many were at their first roundtable ever.
+  - Back from last year: the share of last year's people who came again this year.
+  - Coverage by program: packs, troops, crews, and ships reached, of those on the unit list.
+  - Each roundtable's headcount next to the same month last year.
+  - The Excel export adds these to the summary, a "Same month last year" column, and a By program sheet.
+- **Contact page**: a Roundtables card with this year's count of those held, the last one attended, the current streak, and the most recent roundtables with how each was recorded.
 
 ## Demo and screenshots
 

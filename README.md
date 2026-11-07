@@ -48,7 +48,7 @@ Load the council's unit membership report, and coverage is measured against the 
 
 ### The council report
 
-The number council asks for: the share of units with at least one person at a roundtable this scouting year. Below it, the units you haven't reached yet, with their leaders' emails one click away, and an Excel export.
+The number council asks for: the share of units with at least one person at a roundtable this scouting year. Below it, the trends (new and returning people, how many came back from last year, packs and troops reached, each month next to the same month last year), the units you haven't reached yet with their leaders' emails one click away, and an Excel export.
 
 ![The council report: coverage, units still to reach, and a breakdown](docs/screenshots/council-report.png)
 
