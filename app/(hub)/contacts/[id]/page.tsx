@@ -12,8 +12,11 @@ import { meetingDateLabel } from "@/lib/attendance/year";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { SOURCE_LABELS, STATUS_LABELS } from "@/lib/contacts/format";
+import { membershipsFor } from "@/lib/announcements/audiences";
 import { getContact, listUnits, positionsInUse } from "@/lib/contacts/queries";
+import { listGroups } from "@/lib/groups/store";
 import { AffiliationList, ArchiveButton, ContactEditor, DeleteContactButton } from "./contact-editor";
+import { GroupsCard } from "./groups-card";
 
 export const metadata: Metadata = { title: "Contact" };
 
@@ -43,7 +46,14 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
   const { id } = await params;
   const user = await requireUser();
   if (!z.uuid().safeParse(id).success) notFound();
-  const [c, units, rosterTitles, history] = await Promise.all([getContact(id), listUnits(), positionsInUse(), contactRecord(id)]);
+  const [c, units, rosterTitles, history, memberships, allGroups] = await Promise.all([
+    getContact(id),
+    listUnits(),
+    positionsInUse(),
+    contactRecord(id),
+    membershipsFor(id),
+    listGroups(),
+  ]);
   if (!c) notFound();
   const canEdit = hasRole(user.role, "editor");
   const fromRoster = c.source === "import";
@@ -160,6 +170,15 @@ async function ContactDetailView({ params }: { params: PageProps<"/contacts/[id]
         multiple={c.multipleRegistrations}
         youth={c.isYouth}
         fromRoster={rosterTitles}
+      />
+
+      <GroupsCard
+        contactId={c.id}
+        builtIn={memberships.builtIn}
+        groups={memberships.groups}
+        allGroups={allGroups.map((g) => ({ id: g.id, name: g.name }))}
+        leftOut={memberships.leftOut}
+        canEdit={canEdit}
       />
     </>
   );

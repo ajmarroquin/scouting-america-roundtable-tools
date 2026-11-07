@@ -233,6 +233,16 @@ await open(admin, "/");
 await shot(admin, "home");
 await open(admin, "/contacts");
 await shot(admin, "contacts");
+
+// A small test group, picked straight from the contacts list.
+const pick = admin.getByRole("checkbox", { name: /^Pick (?!everyone)/ });
+for (const i of [0, 2, 3]) await pick.nth(i).click();
+await admin.getByRole("combobox", { name: "Group to add them to" }).click();
+await admin.getByRole("option", { name: "New group…" }).click();
+await admin.getByLabel("New group name").fill("Test group");
+await shot(admin, "contacts-groups");
+await admin.getByRole("region", { name: "Picked people" }).getByRole("button", { name: "Add", exact: true }).click();
+await admin.getByText("Test group", { exact: true }).first().waitFor();
 await admin.goto(october);
 await admin.waitForLoadState("networkidle");
 await shot(admin, "meeting", true);

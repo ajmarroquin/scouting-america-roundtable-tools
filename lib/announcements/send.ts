@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { announcement, contact, setting } from "@/lib/db/schema";
 import { emailFailureReason } from "@/lib/email/errors";
 import { senderAddress } from "@/lib/email/sender";
-import { AUDIENCES, audienceMembers, isAudience } from "./audiences";
+import { audienceInfo, audienceMembers, isAudienceKey } from "./audiences";
 import { type BroadcastMailer, getMailer } from "./mailer";
 import { brandFrom } from "./brand";
 import { getBrand } from "./brand-store";
@@ -16,7 +16,7 @@ import { renderAnnouncement } from "./render";
 const SEGMENTS_SETTING = "announcements.segments";
 
 const draftSchema = z.object({
-  audience: z.string().refine(isAudience, "Pick who it goes to."),
+  audience: z.string().refine(isAudienceKey, "Pick who it goes to."),
   subject: z.string().trim().min(1, "Write a subject.").max(150, "Keep the subject under 150 characters."),
   body: z.string().trim().min(1, "Write the message.").max(20000, "That message is too long."),
   previewText: z.string().trim().max(150, "Keep the preview text under 150 characters.").optional(),
@@ -76,8 +76,9 @@ export async function sendAnnouncement(actor: CurrentUser, raw: AnnouncementDraf
   const parsed = draftSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Check the message." };
   const { subject, body } = parsed.data;
-  const key = parsed.data.audience as (typeof AUDIENCES)[number]["key"];
-  const audience = AUDIENCES.find((a) => a.key === key)!;
+  const key = parsed.data.audience;
+  const audience = await audienceInfo(key);
+  if (!audience) return { ok: false, message: "That group doesn't exist anymore. Pick another." };
   let recipients = 0;
 
   const record = async (status: "sent" | "failed", extra: { error?: string; broadcastId?: string }) => {

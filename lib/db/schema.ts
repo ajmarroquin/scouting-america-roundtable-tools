@@ -8,6 +8,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -230,6 +231,35 @@ export const affiliation = pgTable(
     index("affiliation_unit_idx").on(t.unitId),
     check("affiliation_source_check", sql`${t.source} in ('import', 'manual')`),
   ],
+);
+
+// Groups people build by hand, such as a small test group or a committee. An
+// announcement can go to one, and the contacts list can filter by one.
+export const contactGroup = pgTable(
+  "contact_group",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("contact_group_name_key").on(sql`lower(${t.name})`)],
+);
+
+export const contactGroupMember = pgTable(
+  "contact_group_member",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => contactGroup.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contact.id, { onDelete: "cascade" }),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.contactId] }), index("contact_group_member_contact_idx").on(t.contactId)],
 );
 
 export const setting = pgTable("setting", {

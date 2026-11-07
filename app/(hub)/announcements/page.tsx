@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AUDIENCES, audienceCounts } from "@/lib/announcements/audiences";
+import { audienceOptions } from "@/lib/announcements/audiences";
 import { senderEmail } from "@/lib/announcements/brand";
 import { getBrand } from "@/lib/announcements/brand-store";
 import { listAnnouncements, unsubscribedCount } from "@/lib/announcements/send";
@@ -46,12 +46,12 @@ const dateTime = (d: Date) =>
 async function AnnouncementsData() {
   const user = await requireUser();
   if (!hasRole(user.role, "admin")) return <p className="text-sm text-muted-foreground">Only admins can send announcements.</p>;
-  const [counts, history, unsubscribed, brand] = await Promise.all([audienceCounts(), listAnnouncements(), unsubscribedCount(), getBrand()]);
+  const [audiences, history, unsubscribed, brand] = await Promise.all([audienceOptions(), listAnnouncements(), unsubscribedCount(), getBrand()]);
   const fromEmail = senderEmail(senderAddress(process.env));
   return (
     <>
       <Compose
-        audiences={AUDIENCES.map((a) => ({ key: a.key, label: a.label, description: a.description, count: counts[a.key] }))}
+        audiences={audiences}
         sender={{ name: user.name, email: user.email }}
         brand={brand}
         fromEmail={fromEmail}

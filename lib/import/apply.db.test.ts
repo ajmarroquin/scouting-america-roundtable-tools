@@ -530,4 +530,80 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(await send.unsubscribedCount()).toBe(1);
     expect(await send.sendAnnouncement(actor, { audience: "nobody", subject: "x", body: "y" }, mailer)).toMatchObject({ ok: false });
   });
+
+  it("builds groups by hand, shows who's in one and who's left out, and sends to it", async () => {
+    const groups = await import("@/lib/groups/store");
+    const audiences = await import("@/lib/announcements/audiences");
+    const send = await import("@/lib/announcements/send");
+    const sent: Record<string, string>[] = [];
+    const mailer = {
+      unsubscribedEmails: async () => [],
+      syncSegment: async (_name: string, id: string | null) => id ?? "seg-group",
+      sendBroadcast: async (opts: Record<string, string>) => {
+        sent.push(opts);
+        return "bc-group";
+      },
+      sendTest: async () => {},
+    };
+
+    // People the group's announcement can't reach, each for a different reason.
+    const [youth] = await db
+      .insert(schema.contact)
+      .values({ firstName: "Kid", lastName: "Testcase", isYouth: true, guardianEmail: "parent@example.com", email: "kid@example.com" })
+      .returning();
+    const [noEmail] = await db.insert(schema.contact).values({ firstName: "Nomail", lastName: "Person" }).returning();
+    const byName = async (first: string) => (await db.select().from(schema.contact).where(eq(schema.contact.firstName, first)))[0];
+    const [pat, sam, alex] = [await byName("Pat"), await byName("Sam"), await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001")).then((r) => r[0])];
+    expect(alex.unsubscribedAt).not.toBeNull();
+
+    const made = await groups.createGroup(actor, { name: "Test group", description: "Trying things first" }, [pat.id, sam.id, alex.id, youth.id]);
+    expect(made).toMatchObject({ ok: true, message: 'Made the group "Test group" with 4 people.' });
+    const id = (made as { id: string }).id;
+    expect(await groups.createGroup(actor, { name: "test GROUP" })).toMatchObject({ ok: false, message: expect.stringContaining("already a group") });
+    expect(await groups.createGroup(actor, { name: "  " })).toMatchObject({ ok: false });
+    expect(await groups.addToGroup(actor, id, [noEmail.id, pat.id])).toMatchObject({ ok: true, message: 'Added 1 to "Test group". 1 was already in it.' });
+
+    const key = audiences.groupKey(id);
+    expect(audiences.isAudienceKey(key)).toBe(true);
+    expect(audiences.isAudienceKey("group:not-a-uuid")).toBe(false);
+    const roster = await audiences.audienceRoster(key);
+    // Pat and Sam share a family email, so one of them gets it.
+    expect(roster.members.map((m) => m.name)).toEqual(["Pat Testcase"]);
+    expect(Object.fromEntries(roster.leftOut.map((p) => [p.name, p.reason]))).toEqual({
+      "Kid Testcase": "youth",
+      "Nomail Person": "no_email",
+      [`${alex.preferredName || alex.firstName} ${alex.lastName}`]: "unsubscribed",
+      "Sam Testcase": "shared_email",
+    });
+    expect((await audiences.audienceMembers(key)).map((m) => m.email)).toEqual([pat.email]);
+
+    const options = await audiences.audienceOptions();
+    expect(options.find((o) => o.key === key)).toMatchObject({ label: "Test group", custom: true, count: 1 });
+    expect((await audiences.membershipMap())[pat.id]).toEqual(expect.arrayContaining(["everyone", key]));
+
+    const mine = await audiences.membershipsFor(pat.id);
+    expect(mine.groups).toEqual([{ id, name: "Test group" }]);
+    expect(mine.builtIn.map((m) => m.key)).toContain("packs");
+    expect(mine.builtIn.find((m) => m.key === "packs")!.why).toContain("Pack 101");
+    expect((await audiences.membershipsFor(youth.id)).leftOut).toBe("youth");
+
+    const result = await send.sendAnnouncement(actor, { audience: key, subject: "Just us", body: "Hi {first name}." }, mailer);
+    expect(result.ok).toBe(true);
+    const [latest] = await send.listAnnouncements();
+    expect(latest).toMatchObject({ audience: key, audienceLabel: "Test group", recipients: 1 });
+
+    expect(await groups.updateGroup(actor, id, { name: "Testers" })).toMatchObject({ ok: true });
+    expect((await groups.listGroups()).map((g) => [g.name, g.count, g.createdByName])).toEqual([["Testers", 5, "Test"]]);
+    expect(await groups.removeFromGroup(actor, id, [pat.id])).toMatchObject({ message: 'Took 1 out of "Testers".' });
+    expect(await groups.groupsOf(pat.id)).toEqual([]);
+
+    expect(await groups.deleteGroup(actor, id)).toMatchObject({ ok: true });
+    // The people are still there; only the group is gone.
+    expect(await byName("Sam")).toBeDefined();
+    expect(await send.sendAnnouncement(actor, { audience: key, subject: "x", body: "y" }, mailer)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("doesn't exist anymore"),
+    });
+    expect(await groups.addToGroup(actor, id, [sam.id])).toMatchObject({ ok: false });
+  });
 });
