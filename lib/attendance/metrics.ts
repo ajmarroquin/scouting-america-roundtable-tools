@@ -100,7 +100,7 @@ export async function meetingCoverage(meetingId: string, date: string): Promise<
 
 export type Leader = { unitId: string; contactId: string; name: string; position: string; email: string | null; isYouth: boolean; guardianEmail: string | null };
 
-/** Each unit's top leader, committee chair, and chartered org rep, for outreach. */
+/** Each unit's Key 3 (unit leader, committee chair, unit rep), for outreach. */
 export async function outreachContacts(unitIds: string[]): Promise<Leader[]> {
   if (!unitIds.length) return [];
   const rows = await db

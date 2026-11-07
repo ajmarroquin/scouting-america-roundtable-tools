@@ -24,29 +24,39 @@ export const AUDIENCES = [
   },
   {
     key: "unit-leaders",
-    label: "Unit leaders",
+    label: "Unit Key 3",
     description:
-      "Each unit's key leaders only: the Cubmaster, Scoutmaster, Crew Advisor, Skipper, Post or Club Advisor, Committee Chair, and Chartered Organization Rep. Not den leaders, assistants, or committee members.",
+      "Each unit's Key 3: the unit leader (Cubmaster, Scoutmaster, Skipper, Crew, Post, or Club Advisor), the Committee Chair, and the unit rep (Chartered Organization Rep or Council Unit Representative).",
   },
   {
     key: "not-reached",
     label: "Units not at roundtable yet this year",
-    description: "The unit leaders (as above) of units nobody has represented at a roundtable this scouting year.",
+    description: "The Key 3 of units nobody has represented at a roundtable this scouting year.",
   },
   {
     key: "packs",
-    label: "Pack leaders",
+    label: "All Cub Scout Volunteers",
     description: "Every adult with any role in a pack: Cubmasters, den leaders, assistants, committee, and members.",
   },
   {
     key: "troops",
-    label: "Troop leaders",
+    label: "All Scouts BSA Volunteers",
     description: "Every adult with any role in a troop: Scoutmasters, assistants, committee, and members.",
   },
   {
-    key: "crews-ships",
-    label: "Crew and ship leaders",
-    description: "Every adult with any role in a crew, ship, post, or club.",
+    key: "crews",
+    label: "All Venturing Volunteers",
+    description: "Every adult with any role in a Venturing crew.",
+  },
+  {
+    key: "ships",
+    label: "All Sea Scouts Volunteers",
+    description: "Every adult with any role in a Sea Scout ship.",
+  },
+  {
+    key: "exploring",
+    label: "All Exploring Volunteers",
+    description: "Every adult with any role in an Exploring post or club.",
   },
   {
     key: "district",
@@ -185,8 +195,12 @@ async function builtInContactIds(key: AudienceKey): Promise<string[] | "all"> {
       return byUnitType(["Pack"]);
     case "troops":
       return byUnitType(["Troop"]);
-    case "crews-ships":
-      return byUnitType(["Crew", "Ship", "Post", "Club"]);
+    case "crews":
+      return byUnitType(["Crew"]);
+    case "ships":
+      return byUnitType(["Ship"]);
+    case "exploring":
+      return byUnitType(["Post", "Club"]);
     case "district":
       return (await db.selectDistinct({ id: affiliation.contactId }).from(affiliation).where(isNull(affiliation.unitId))).map((r) => r.id);
     case "came-this-year": {
@@ -333,7 +347,9 @@ export async function membershipsFor(contactId: string): Promise<{
     "not-reached": `${describe(leaders)}. Nobody from the unit has come yet this year.`,
     packs: describe(affs.filter((a) => a.type === "Pack")),
     troops: describe(affs.filter((a) => a.type === "Troop")),
-    "crews-ships": describe(affs.filter((a) => a.type && ["Crew", "Ship", "Post", "Club"].includes(a.type))),
+    crews: describe(affs.filter((a) => a.type === "Crew")),
+    ships: describe(affs.filter((a) => a.type === "Ship")),
+    exploring: describe(affs.filter((a) => a.type === "Post" || a.type === "Club")),
     district: describe(affs.filter((a) => !a.unitId)),
     "came-this-year": "Checked in at a roundtable this scouting year",
   };

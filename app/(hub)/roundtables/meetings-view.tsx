@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon, FileUpIcon, UserCheckIcon } from "lucide-react";
+import { DownloadIcon, EllipsisVerticalIcon, FileUpIcon, PlusIcon, UserCheckIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -12,6 +12,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -80,6 +82,7 @@ export function MeetingsView({
   const upcoming = shown.filter((m) => m.status === "held" && isUpcoming(m.date, today)).length;
   const cancelled = shown.filter((m) => m.status === "cancelled").length;
   const [pending, start] = useTransition();
+  const [adding, setAdding] = useState(false);
 
   async function exportYear(kind: "xlsx" | "matrix" | "long") {
     const data = await exportAttendanceAction(year);
@@ -106,8 +109,60 @@ export function MeetingsView({
         </Button>
       )}
 
-      {canEdit && (
-        <Card>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={year} onValueChange={setYear}>
+          <SelectTrigger aria-label="Scouting year" className="w-52">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {years.map((y) => (
+              <SelectItem key={y} value={y}>
+                {y} scouting year
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mr-auto text-sm text-muted-foreground" role="status">
+          {held} held{upcoming > 0 && `, ${upcoming} upcoming`}, {cancelled} cancelled
+        </p>
+        {canEdit && (
+          <Button size="sm" variant={adding ? "secondary" : "default"} aria-expanded={adding} aria-controls="new-meeting" onClick={() => setAdding(!adding)}>
+            <PlusIcon /> Add meeting
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon-sm" aria-label="More roundtable actions">
+              <EllipsisVerticalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-60">
+            {canImport && (
+              <>
+                <DropdownMenuItem asChild>
+                  <Link href="/roundtables/import">
+                    <FileUpIcon /> Load an old sheet
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuLabel>Export {year}</DropdownMenuLabel>
+            <DropdownMenuItem disabled={shown.length === 0} onSelect={() => void exportYear("xlsx")}>
+              <DownloadIcon /> Excel (both views)
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={shown.length === 0} onSelect={() => void exportYear("matrix")}>
+              <DownloadIcon /> CSV, one row per person
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={shown.length === 0} onSelect={() => void exportYear("long")}>
+              <DownloadIcon /> CSV, one row per check-in
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {canEdit && adding && (
+        <Card id="new-meeting">
           <CardHeader>
             <CardTitle>New meeting</CardTitle>
           </CardHeader>
@@ -129,50 +184,18 @@ export function MeetingsView({
               }}
             >
               <MeetingFields idPrefix="new" values={values} onChange={setValues} today={today} saved={savedDetails(meetings)} compact />
-              <Button type="submit" className="w-fit" disabled={pending}>
-                {pending ? "Adding…" : "Add meeting"}
-              </Button>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={pending}>
+                  {pending ? "Saving…" : "Save meeting"}
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
+                  Cancel
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>
       )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Select value={year} onValueChange={setYear}>
-          <SelectTrigger aria-label="Scouting year" className="w-52">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {years.map((y) => (
-              <SelectItem key={y} value={y}>
-                {y} scouting year
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="mr-auto text-sm text-muted-foreground" role="status">
-          {held} held{upcoming > 0 && `, ${upcoming} upcoming`}, {cancelled} cancelled
-        </p>
-        {canImport && (
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/roundtables/import">
-              <FileUpIcon /> Load an old sheet
-            </Link>
-          </Button>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={shown.length === 0}>
-              <DownloadIcon /> Export {year}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => void exportYear("xlsx")}>Excel (both views)</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportYear("matrix")}>CSV, one row per person</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void exportYear("long")}>CSV, one row per check-in</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
 
       {shown.length === 0 ? (
         <p className="text-sm text-muted-foreground">No meetings in {year} yet.</p>

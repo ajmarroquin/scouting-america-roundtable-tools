@@ -52,17 +52,18 @@ export const DISTRICT_POSITIONS = [
 
 export const YOUTH_POSITION = "Youth member";
 
-/** Who hears from us when a unit hasn't been to roundtable: its top leader, committee chair, and chartered org rep. */
-export const OUTREACH_POSITIONS = [
-  "Cubmaster",
-  "Scoutmaster",
-  "Venturing Crew Advisor",
-  "Skipper",
-  "Post Advisor",
-  "Club Advisor",
-  "Committee Chair",
-  "Chartered Organization Rep.",
-];
+/**
+ * A unit's Key 3: its unit leader, its committee chair, and its unit rep (the
+ * chartered organization rep, or a council unit representative, who fills the
+ * same role). Who hears from us when a unit hasn't been to roundtable.
+ */
+export const KEY3_POSITIONS = {
+  unitLeader: ["Cubmaster", "Scoutmaster", "Venturing Crew Advisor", "Skipper", "Post Advisor", "Club Advisor"],
+  committeeChair: ["Committee Chair"],
+  unitRep: ["Chartered Organization Rep.", "Council Unit Representative"],
+};
+
+export const OUTREACH_POSITIONS = [...KEY3_POSITIONS.unitLeader, ...KEY3_POSITIONS.committeeChair, ...KEY3_POSITIONS.unitRep];
 
 export type PositionGroup = { label: string; positions: string[] };
 

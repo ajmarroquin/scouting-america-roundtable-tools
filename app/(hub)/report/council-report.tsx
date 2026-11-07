@@ -181,7 +181,8 @@ export function CouncilReport({ coverage: c, years, leaders }: { coverage: YearC
           {toReach.some((u) => leadersOf(u.id).length > 0) && <CopyEmails contacts={toReach.flatMap((u) => leadersOf(u.id))} />}
         </div>
         <p className="text-sm text-muted-foreground">
-          Leaders here means each unit&apos;s top leader, committee chair, and chartered org rep in contacts.
+          Leaders here means each unit&apos;s Key 3 in contacts: the unit leader, the committee chair, and the unit rep (chartered org rep
+          or council unit representative).
         </p>
         {toReach.length === 0 ? (
           <p className="text-sm">Every unit has had someone at a roundtable this year.</p>

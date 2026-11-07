@@ -1,8 +1,8 @@
 "use client";
 
-import { DownloadIcon, PlusIcon, SearchIcon, UploadIcon, UsersIcon } from "lucide-react";
+import { DownloadIcon, EllipsisVerticalIcon, PlusIcon, SearchIcon, SettingsIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -134,6 +136,8 @@ export function ContactsTable({
   // A group link shows everyone in the group, whatever their status.
   const [filters, setFilterState] = useState<Filters>(initialGroup ? { ...DEFAULTS, group: [initialGroup], status: [] } : DEFAULTS);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [copyOptionsOpen, setCopyOptionsOpen] = useState(false);
+  const openCopyOptions = useRef(false);
   // Picking people is for what's on screen, so a new filter starts a new pick.
   const setFilters = (next: Filters | ((f: Filters) => Filters)) => {
     setFilterState(next);
@@ -203,28 +207,6 @@ export function ContactsTable({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {canEdit && (
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/contacts/new">
-              <PlusIcon /> Add contact
-            </Link>
-          </Button>
-        )}
-        {canImport && (
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/contacts/import">
-              <UploadIcon /> Import roster
-            </Link>
-          </Button>
-        )}
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/contacts/groups">
-            <UsersIcon /> Groups
-          </Link>
-        </Button>
-      </div>
-
       <div className="grid gap-2 sm:flex sm:flex-wrap">
         <div className="relative sm:min-w-64 sm:flex-1">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -296,35 +278,75 @@ export function ContactsTable({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <p className="mr-auto text-sm text-muted-foreground" role="status">
+        <p className="w-full text-sm text-muted-foreground sm:mr-auto sm:w-auto" role="status">
           {filtered.length} of {contacts.length} contacts
         </p>
-        <CopyEmails contacts={filtered} />
+        {canEdit && (
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/contacts/new">
+              <PlusIcon /> Add contact
+            </Link>
+          </Button>
+        )}
+        <CopyEmails contacts={filtered} optionsButton={false} optionsOpen={copyOptionsOpen} onOptionsOpenChange={setCopyOptionsOpen} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" disabled={filtered.length === 0}>
-              <DownloadIcon /> Export
+            <Button variant="outline" size="icon-sm" aria-label="More contact actions">
+              <EllipsisVerticalIcon />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent
+            align="end"
+            className="w-56"
+            onCloseAutoFocus={(e) => {
+              // Open the copy options once the menu has fully closed, so its focus
+              // going back to this button doesn't close the panel straight away.
+              if (!openCopyOptions.current) return;
+              openCopyOptions.current = false;
+              e.preventDefault();
+              setCopyOptionsOpen(true);
+            }}
+          >
+            {canImport && (
+              <>
+                <DropdownMenuItem asChild>
+                  <Link href="/contacts/import">
+                    <UploadIcon /> Import roster
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuLabel>Export the {filtered.length} shown</DropdownMenuLabel>
             <DropdownMenuItem
+              disabled={filtered.length === 0}
               onSelect={() => downloadCsv(`contacts-${stamp()}.csv`, CONTACT_EXPORT_HEADERS, contactExportRows(filtered))}
             >
-              CSV
+              <DownloadIcon /> CSV
             </DropdownMenuItem>
             <DropdownMenuItem
+              disabled={filtered.length === 0}
               onSelect={() =>
                 void downloadXlsx(`contacts-${stamp()}.xlsx`, [
                   { name: "Contacts", headers: CONTACT_EXPORT_HEADERS, rows: contactExportRows(filtered) },
                 ])
               }
             >
-              Excel
+              <DownloadIcon /> Excel
             </DropdownMenuItem>
             <DropdownMenuItem
+              disabled={filtered.length === 0}
               onSelect={() => downloadCsv(`resend-contacts-${stamp()}.csv`, RESEND_EXPORT_HEADERS, resendExportRows(filtered))}
             >
-              Resend contact list (CSV)
+              <DownloadIcon /> Resend contact list (CSV)
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                openCopyOptions.current = true;
+              }}
+            >
+              <SettingsIcon /> Email copy options
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

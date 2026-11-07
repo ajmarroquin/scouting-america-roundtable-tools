@@ -1,7 +1,8 @@
 "use client";
 
 import { CopyIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Popover as PopoverPrimitive } from "radix-ui";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,9 +36,31 @@ function savePrefs(prefs: { separator: Separator; batch: string }) {
   }
 }
 
-export function CopyEmails({ contacts }: { contacts: EmailSource[] }) {
-  const [open, setOpen] = useState(false);
+/**
+ * A button that copies the emails, with its options in a panel that opens
+ * under it, so nothing else on the row moves. Pass `optionsOpen` and
+ * `onOptionsOpenChange` to open the options from somewhere else, like a menu,
+ * and `optionsButton={false}` to leave out the Options button.
+ */
+export function CopyEmails({
+  contacts,
+  optionsOpen,
+  onOptionsOpenChange,
+  optionsButton = true,
+}: {
+  contacts: EmailSource[];
+  optionsOpen?: boolean;
+  onOptionsOpenChange?: (open: boolean) => void;
+  optionsButton?: boolean;
+}) {
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = optionsOpen ?? ownOpen;
+  const setOpen = (next: boolean) => {
+    if (optionsOpen === undefined) setOwnOpen(next);
+    onOptionsOpenChange?.(next);
+  };
   const [prefs, setPrefs] = useState(loadPrefs);
+  const id = useId();
   const { emails, withoutEmail, unsubscribed } = useMemo(() => collectEmails(contacts), [contacts]);
   const groups = batchEmails(emails, prefs.batch === "all" ? null : Number(prefs.batch));
 
@@ -59,48 +82,77 @@ export function CopyEmails({ contacts }: { contacts: EmailSource[] }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" disabled={emails.length === 0} onClick={() => (groups.length === 1 && !open ? void copy(emails, `${emails.length} emails`) : setOpen(!open))}>
-        <CopyIcon /> Copy {emails.length} email{emails.length === 1 ? "" : "s"}
-      </Button>
-      <Button variant="ghost" size="sm" onClick={() => setOpen(!open)} aria-expanded={open}>
-        Options
-      </Button>
-      {open && (
-        <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border p-2">
-          <Select value={prefs.separator} onValueChange={(v) => update({ separator: v as Separator })}>
-            <SelectTrigger size="sm" aria-label="Separator">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="comma">Commas (Gmail)</SelectItem>
-              <SelectItem value="semicolon">Semicolons (Outlook)</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={prefs.batch} onValueChange={(v) => update({ batch: v })}>
-            <SelectTrigger size="sm" aria-label="Batch size">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All at once</SelectItem>
-              <SelectItem value="50">50 at a time</SelectItem>
-              <SelectItem value="100">100 at a time</SelectItem>
-            </SelectContent>
-          </Select>
-          {groups.map((g, i) => {
-            const start = groups.slice(0, i).reduce((n, x) => n + x.length, 0) + 1;
-            const label = groups.length === 1 ? `${g.length} emails` : `${start}–${start + g.length - 1}`;
-            return (
-              <Button key={i} variant="outline" size="sm" onClick={() => void copy(g, label)}>
-                Copy {label}
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+      <PopoverPrimitive.Anchor asChild>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            disabled={emails.length === 0}
+            // In batches, the panel is where you pick which batch to copy.
+            onClick={() => (groups.length > 1 ? setOpen(true) : void copy(emails, `${emails.length} emails`))}
+          >
+            <CopyIcon /> Copy {emails.length} email{emails.length === 1 ? "" : "s"}
+          </Button>
+          {optionsButton && (
+            <PopoverPrimitive.Trigger asChild>
+              <Button variant="ghost" size="sm">
+                Options
               </Button>
-            );
-          })}
-          <p className="w-full text-xs text-muted-foreground">
-            Youth contacts bring their parent or guardian&apos;s email along. Paste into BCC.
-          </p>
+            </PopoverPrimitive.Trigger>
+          )}
         </div>
-      )}
-    </div>
+      </PopoverPrimitive.Anchor>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          align="end"
+          sideOffset={4}
+          aria-label="Email copy options"
+          className="z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-lg border bg-popover p-3 text-popover-foreground shadow-md"
+        >
+          <p className="text-sm font-medium">Email copy options</p>
+          <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-sm">
+            <span id={`${id}-separator`} className="text-muted-foreground">
+              Separate with
+            </span>
+            <Select value={prefs.separator} onValueChange={(v) => update({ separator: v as Separator })}>
+              <SelectTrigger size="sm" aria-labelledby={`${id}-separator`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="comma">Commas (Gmail)</SelectItem>
+                <SelectItem value="semicolon">Semicolons (Outlook)</SelectItem>
+              </SelectContent>
+            </Select>
+            <span id={`${id}-batch`} className="text-muted-foreground">
+              Copy
+            </span>
+            <Select value={prefs.batch} onValueChange={(v) => update({ batch: v })}>
+              <SelectTrigger size="sm" aria-labelledby={`${id}-batch`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All at once</SelectItem>
+                <SelectItem value="50">50 at a time</SelectItem>
+                <SelectItem value="100">100 at a time</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {emails.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {groups.map((g, i) => {
+                const start = groups.slice(0, i).reduce((n, x) => n + x.length, 0) + 1;
+                const label = groups.length === 1 ? `${g.length} emails` : `${start}–${start + g.length - 1}`;
+                return (
+                  <Button key={i} variant="outline" size="sm" onClick={() => void copy(g, label)}>
+                    Copy {label}
+                  </Button>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">Youth contacts bring their parent or guardian&apos;s email along. Paste into BCC.</p>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   );
 }

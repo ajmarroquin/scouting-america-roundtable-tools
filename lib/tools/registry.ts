@@ -22,7 +22,7 @@ export const TOOLS: Tool[] = [
   {
     slug: "announcements",
     name: "Announcements",
-    description: "Email unit leaders, units you haven't reached, or everyone, with an unsubscribe link built in.",
+    description: "Email each unit's Key 3, units you haven't reached, or everyone, with an unsubscribe link built in.",
     href: "/announcements",
     minRole: "admin",
     status: "live",
