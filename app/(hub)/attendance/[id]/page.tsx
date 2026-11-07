@@ -11,6 +11,8 @@ import { checkInPeople, getMeeting } from "@/lib/attendance/queries";
 import { hhmm, isUpcoming, timeRange } from "@/lib/attendance/schedule";
 import { appTimeZone, appToday } from "@/lib/attendance/today";
 import { checkInWindow, clockIn } from "@/lib/selfcheckin/rules";
+import { KIND_LABELS } from "@/lib/reminders/rules";
+import { remindersFor } from "@/lib/reminders/service";
 import { openReviews, rsvpsFor } from "@/lib/selfcheckin/service";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import { FORMAT_LABELS } from "@/lib/attendance/labels";
@@ -19,6 +21,7 @@ import { requireUser } from "@/lib/auth/session";
 import { AttendeesTable, DeleteMeetingButton, ExportMeetingButton, MeetingEditor } from "./meeting-detail";
 import { CoverageCards } from "./coverage-cards";
 import { PasteList } from "./paste-list";
+import { RemindersCard } from "./reminders-card";
 import { ReviewList } from "./review-list";
 import { SelfCheckInCard } from "./self-check-in-card";
 
@@ -55,6 +58,8 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
     canEdit && m.status === "held" ? openReviews(m.id) : [],
     m.status === "held" ? rsvpsFor(m.id) : { yes: [], no: [] },
   ]);
+  const isAdmin = hasRole(user.role, "admin");
+  const reminderItems = isAdmin && m.status === "held" ? await remindersFor(m.id) : [];
   const tz = appTimeZone();
   const w = checkInWindow(m, new Date(), tz);
   const selfStatus =
@@ -158,6 +163,21 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
             ))}
           </CardContent>
         </Card>
+      )}
+
+      {isAdmin && m.status === "held" && (upcoming || m.date === today || reminderItems.length > 0) && (
+        <RemindersCard
+          meetingId={m.id}
+          canDraft={m.date >= today}
+          items={reminderItems.map((r) => ({
+            id: r.id,
+            kindLabel: KIND_LABELS[r.kind],
+            sendLabel: meetingDateLabel(r.sendOn, "short"),
+            subject: r.subject,
+            status: r.status,
+            error: r.error,
+          }))}
+        />
       )}
 
       {canEdit && m.status === "held" && (

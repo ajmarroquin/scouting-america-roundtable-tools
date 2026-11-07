@@ -831,4 +831,82 @@ describe.skipIf(!local)("import against Postgres", () => {
     });
     expect((await sci.publicMeeting(token, during))?.rsvpOpen).toBe(false);
   });
+
+  it("sends reminders at 9 am on their day, only once approved, and never twice", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const rem = await import("@/lib/reminders/service");
+    const send = await import("@/lib/announcements/send");
+    process.env.EMAIL_FROM = "Roundtable Tools <no-reply@example.org>";
+    const broadcasts: Record<string, string>[] = [];
+    const mailer = {
+      unsubscribedEmails: async () => [],
+      syncSegment: async (_n: string, id: string | null) => id ?? "seg-r",
+      sendBroadcast: async (opts: Record<string, string>) => {
+        broadcasts.push(opts);
+        return "bc-r";
+      },
+      sendTest: async () => {},
+    };
+    const made = await att.createMeeting(actor, {
+      date: "2027-02-25",
+      startTime: "19:00",
+      endTime: "20:30",
+      title: "Pinewood prep",
+      format: "hybrid",
+      status: "held",
+      notes: "",
+      place: "St. Mark's Hall",
+      joinUrl: "https://example.org/zoom",
+    });
+    const meetingId = made.id!;
+    expect(await rem.draftUsual(actor, meetingId, "https://rt.example.org")).toMatchObject({ ok: true, message: expect.stringContaining("Drafted both") });
+    expect(await rem.draftUsual(actor, meetingId, "https://rt.example.org")).toMatchObject({ message: expect.stringContaining("already drafted") });
+    const [week, day] = await rem.remindersFor(meetingId);
+    expect([week.kind, week.sendOn, week.status]).toEqual(["week_before", "2027-02-18", "draft"]);
+    expect([day.kind, day.sendOn, day.audience]).toEqual(["day_of", "2027-02-25", `rsvp-yes:${meetingId}`]);
+    expect(day.body).toContain("https://rt.example.org/m/");
+
+    // Drafts never send.
+    const nineThirty = new Date("2027-02-18T14:30:00Z"); // 9:30 am in New York
+    expect(await rem.sendDueReminders(nineThirty, mailer)).toMatchObject({ sent: 0 });
+
+    // Approving, then editing, makes it a draft again; approve the edited one.
+    expect(await rem.approveReminder(actor, week.id)).toMatchObject({ ok: true });
+    expect(await rem.saveReminder(actor, week.id, { audience: "everyone", subject: "Roundtable next week", body: week.body, previewText: "See you there" })).toMatchObject({
+      ok: true,
+      message: expect.stringContaining("approving again"),
+    });
+    expect((await rem.getReminder(week.id))!.status).toBe("draft");
+    expect(await rem.saveReminder(actor, week.id, { audience: "nobody", subject: "x", body: "y" })).toMatchObject({ ok: false });
+    expect(await rem.approveReminder(actor, week.id)).toMatchObject({ ok: true });
+
+    // Not the day before, not before 9, then once at 9:30, and not again.
+    expect(await rem.sendDueReminders(new Date("2027-02-17T15:00:00Z"), mailer)).toMatchObject({ sent: 0, skipped: 1 });
+    expect(await rem.sendDueReminders(new Date("2027-02-18T13:30:00Z"), mailer)).toMatchObject({ sent: 0, skipped: 1 });
+    expect(await rem.sendDueReminders(nineThirty, mailer)).toMatchObject({ sent: 1, failed: 0 });
+    expect(broadcasts.at(-1)).toMatchObject({ subject: "Roundtable next week", replyTo: "admin@example.com" });
+    expect(await rem.sendDueReminders(new Date("2027-02-18T15:30:00Z"), mailer)).toMatchObject({ sent: 0 });
+    expect((await rem.getReminder(week.id))!.status).toBe("sent");
+    expect((await send.listAnnouncements())[0]).toMatchObject({ subject: "Roundtable next week", status: "sent" });
+    expect(await rem.saveReminder(actor, week.id, { audience: "everyone", subject: "Changed", body: "x" })).toMatchObject({ ok: false });
+
+    // The day-of reminder goes to whoever said yes; with nobody, it says so instead of sending.
+    await rem.approveReminder(actor, day.id);
+    expect(await rem.sendDueReminders(new Date("2027-02-25T14:10:00Z"), mailer)).toMatchObject({ sent: 0, failed: 1 });
+    expect((await rem.getReminder(day.id))!).toMatchObject({ status: "failed", error: expect.stringContaining("Nobody in") });
+
+    // An approval only counts while the approver is still an admin.
+    await db.insert(schema.user).values({ id: "test-viewer", name: "Vic", email: "viewer@example.com", role: "viewer" });
+    await db.update(schema.reminder).set({ status: "approved", approvedBy: "test-viewer", error: null }).where(eq(schema.reminder.id, day.id));
+    expect(await rem.sendDueReminders(new Date("2027-02-25T14:20:00Z"), mailer)).toMatchObject({ failed: 1 });
+    expect((await rem.getReminder(day.id))!.error).toContain("isn't an admin anymore");
+
+    // The daily job also clears old rate-limit counters.
+    await db.insert(schema.publicRateLimit).values({ key: "old:key", windowStart: new Date("2027-01-01T00:00:00Z"), count: 3 });
+    await rem.sendDueReminders(new Date("2027-02-25T14:30:00Z"), mailer);
+    expect((await db.select().from(schema.publicRateLimit).where(eq(schema.publicRateLimit.key, "old:key"))).length).toBe(0);
+
+    expect(await rem.deleteReminder(actor, day.id)).toMatchObject({ ok: true });
+    expect(await rem.deleteReminder(actor, week.id)).toMatchObject({ ok: false });
+  });
 });

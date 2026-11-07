@@ -220,7 +220,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
 | 4. Metrics (built) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements (built) | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
-| 6. Meeting page (6A to 6C built) | Self check-in at the door, meeting place and join link, filling announcements from a meeting, RSVP, reminders | M to L | A public page in front of a private roster |
+| 6. Meeting page (built) | Self check-in at the door, meeting place and join link, filling announcements from a meeting, RSVP, reminders | M to L | A public page in front of a private roster |
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
 
@@ -358,7 +358,10 @@ Built as planned (migration 0011 `rsvp`). The page takes RSVPs from when the lin
 - Meeting page (editors): RSVP counts and the list. The check-in board marks who said yes, to speed up the door.
 - Audiences for each upcoming meeting: "Said yes to Nov 19" and "Hasn't answered for Nov 19", for reminders.
 
-### 6D. Reminders
+### 6D. Reminders (built)
+
+AJ's choices: a reminder a week before and the day of, at 9 am Eastern, and nothing sends unless the exact message was approved. Built with a daily Vercel cron (free plan: once a day per job, any time in the hour), run at 13:00 and 14:00 UTC with a 9 am local gate so it holds across daylight time; `app/api/cron/reminders` checks `CRON_SECRET`. `reminder` table (migration 0012): one per meeting per kind, its day follows the meeting's date, editing an approved reminder makes it a draft again, it sends as its approver (who must still be an admin) so replies go to them, and it's claimed before sending so it never goes twice. Defaults: the week-before goes to unit leaders with the meeting filled in; the day-of goes to "Said yes" with the check-in and join buttons. Both are editable before approval. The job also clears rate-limit counters older than a day.
+
 
 - First verify two things: how often cron can run on this Vercel plan, and whether Resend broadcasts can be scheduled ahead. Then pick: a daily Vercel cron (protected by `CRON_SECRET`) that sends what's due, which picks up whoever is in the group on the day, or Resend's scheduling for anything that must go at a set hour, where the group is fixed when it's scheduled.
 - Scheduled announcements: `announcement.scheduled_for` and a `scheduled` status, written ahead with the same editor and the "For meeting" fill, listed with a cancel button, and audited.
