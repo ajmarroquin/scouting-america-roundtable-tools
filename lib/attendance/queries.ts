@@ -4,6 +4,7 @@ import { compareUnits, contactName, unitLabel } from "@/lib/contacts/format";
 import { db } from "@/lib/db";
 import { affiliation, attendance, contact, meeting, unit } from "@/lib/db/schema";
 import type { ExportAttendance, ExportMeeting } from "./export";
+import { confirmedUnits } from "./confirmed";
 import { appTimeZone, appToday } from "./today";
 import { personRecord } from "./trends";
 import { unitsRepresented } from "./units";
@@ -32,6 +33,10 @@ export type Attendee = {
   isYouth: boolean;
   units: UnitRef[];
   representedUnitId: string | null;
+  /** Set when they said at self check-in which units they represent (approved ones). */
+  confirmedUnitIds: string[] | null;
+  /** Added themselves at self check-in and waiting for an editor. */
+  pendingReview: boolean;
   method: string;
   checkedInAt: string;
 };
@@ -74,13 +79,25 @@ async function unitsByContact(contactIds: string[]): Promise<Map<string, UnitRef
 export async function listMeetings(): Promise<MeetingRow[]> {
   const [meetings, rows] = await Promise.all([
     db.select().from(meeting).orderBy(desc(meeting.date)),
-    db.select({ meetingId: attendance.meetingId, contactId: attendance.contactId, unitId: attendance.unitId }).from(attendance),
+    db
+      .select({
+        id: attendance.id,
+        meetingId: attendance.meetingId,
+        contactId: attendance.contactId,
+        unitId: attendance.unitId,
+        unitsConfirmed: attendance.unitsConfirmed,
+      })
+      .from(attendance),
   ]);
-  const units = await unitsByContact([...new Set(rows.map((r) => r.contactId))]);
+  const [units, confirmed] = await Promise.all([unitsByContact([...new Set(rows.map((r) => r.contactId))]), confirmedUnits(rows)]);
   return meetings.map((m) => {
     const here = rows.filter((r) => r.meetingId === m.id);
     const represented = unitsRepresented(
-      here.map((r) => ({ representedUnitId: r.unitId, unitIds: (units.get(r.contactId) ?? []).map((u) => u.id) })),
+      here.map((r) => ({
+        representedUnitId: r.unitId,
+        unitIds: (units.get(r.contactId) ?? []).map((u) => u.id),
+        confirmedUnitIds: confirmed.get(r.id) ?? null,
+      })),
     );
     return { ...m, attendees: here.length, units: represented.size };
   });
@@ -95,7 +112,7 @@ export async function getMeeting(id: string) {
     .innerJoin(contact, eq(attendance.contactId, contact.id))
     .where(eq(attendance.meetingId, id))
     .orderBy(asc(contact.lastName), asc(contact.firstName));
-  const units = await unitsByContact(rows.map((r) => r.c.id));
+  const [units, confirmed] = await Promise.all([unitsByContact(rows.map((r) => r.c.id)), confirmedUnits(rows.map((r) => r.a))]);
   const attendees: Attendee[] = rows.map(({ a, c }) => ({
     attendanceId: a.id,
     contactId: c.id,
@@ -104,11 +121,13 @@ export async function getMeeting(id: string) {
     isYouth: c.isYouth,
     units: units.get(c.id) ?? [],
     representedUnitId: a.unitId,
+    confirmedUnitIds: confirmed.get(a.id) ?? null,
+    pendingReview: c.pendingReview,
     method: a.method,
     checkedInAt: a.checkedInAt.toISOString(),
   }));
   const represented = unitsRepresented(
-    attendees.map((a) => ({ representedUnitId: a.representedUnitId, unitIds: a.units.map((u) => u.id) })),
+    attendees.map((a) => ({ representedUnitId: a.representedUnitId, unitIds: a.units.map((u) => u.id), confirmedUnitIds: a.confirmedUnitIds })),
   );
   const allUnits = represented.size ? await db.select().from(unit).where(inArray(unit.id, [...represented])) : [];
   return {

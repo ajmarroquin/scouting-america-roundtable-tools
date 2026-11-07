@@ -1,7 +1,8 @@
 "use client";
 
 import { CheckIcon, SearchIcon, UserPlusIcon } from "lucide-react";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,13 +20,22 @@ export function CheckInBoard({
   checkedIn,
   units,
   fromRoster,
+  live = false,
 }: {
   meetingId: string;
   people: CheckInPerson[];
   checkedIn: string[];
   units: UnitOption[];
   fromRoster: string[];
+  /** Self check-in is open: refresh now and then so people who check themselves in show up. */
+  live?: boolean;
 }) {
+  const router = useRouter();
+  useEffect(() => {
+    if (!live) return;
+    const timer = setInterval(() => router.refresh(), 15000);
+    return () => clearInterval(timer);
+  }, [live, router]);
   const [query, setQuery] = useState("");
   // Taps show at once; the server's list takes over after each refresh.
   const [overrides, setOverrides] = useState<Map<string, boolean>>(new Map());

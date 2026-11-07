@@ -5,6 +5,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // render and go to sign-in. The real check happens in lib/auth/session.ts.
 export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname === "/login") return NextResponse.next();
+  // The public meeting page (self check-in). It checks its own token, window, and rate limits.
+  if (request.nextUrl.pathname.startsWith("/m/")) return NextResponse.next();
   if (!getSessionCookie(request)) {
     return NextResponse.redirect(new URL("/login", request.url));
   }

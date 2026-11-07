@@ -360,6 +360,11 @@ export function ContactsTable({
                   {c.isYouth && <Badge variant="secondary">Youth</Badge>}
                   {c.status !== "active" && <Badge variant="outline">{STATUS_LABELS[c.status]}</Badge>}
                   {c.unsubscribed && <Badge variant="outline">Unsubscribed</Badge>}
+                  {c.pendingReview && (
+                    <Badge variant="outline" title="Added themselves at self check-in; approve them from the meeting's review list">
+                      To review
+                    </Badge>
+                  )}
                   {(memberships[c.id] ?? [])
                     .filter((k) => groupNames.has(k))
                     .map((k) => (

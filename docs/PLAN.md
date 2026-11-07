@@ -220,6 +220,7 @@ DNS is at Namecheap. Step-by-step records are in `docs/SETUP.md`.
 | 3. Attendance (built) | Meetings, check-in screen, walk-ins, pasted lists, legacy import, exports | M | Name matching on legacy data with no emails or IDs |
 | 4. Metrics (built) | Units tool, coverage on meeting pages, council report, outreach list, metrics export | S to M | Low once units are imported |
 | 5. Announcements (built) | Resend audience sync, segments, unsubscribe sync | S to M | Sending domain reputation |
+| 6. Meeting page (6A built) | Self check-in at the door, meeting place and join link, filling announcements from a meeting, RSVP, reminders | M to L | A public page in front of a private roster |
 
 Each phase ships to the production URL behind login and gets used at the next roundtable before the next phase starts.
 
@@ -312,6 +313,58 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
 - **Limits**: Resend's free plan covers marketing email for up to 1,000 contacts, separate from the 100-a-day sign-in email cap, as far as Resend's published plans show. Check before the list grows past that.
 - Without a Resend key locally, sends are logged instead (`DEV_UNSUBSCRIBED` fakes unsubscribes for testing).
 
+## Phase 6: the meeting page (planned)
+
+One public page per meeting, reached by a QR code or a link in an announcement. Before the meeting it takes RSVPs; from 30 minutes before the start to 30 minutes after the end it takes check-ins. People find themselves by **email plus last name**, so the page never lets anyone browse the roster. Four PRs, in this order, each merged and verified before the next.
+
+### Rules for everything public
+
+- Route `app/(public)/m/[token]`, outside the hub layout. `proxy.ts` lets `/m/` through without a session. The token is random (128 bits, base64url) in `meeting.public_token`, made when an editor first shows the QR code, and an editor can reset it if the link spreads.
+- These are the only server actions with no signed-in caller. Instead of `requireUser()`, each one checks the token, the time window, and a rate limit. AGENTS.md gets a line saying so, so nobody copies the pattern elsewhere.
+- **Matching**: an adult contact, not archived, whose email or second email and last name both match (trimmed, case and accents ignored). Youth are never matched. Two matches on one family email: ask "Which one are you?" with first names only. No match: the "new here" form, never "did you mean...".
+- **What the page shows back**: first name and unit labels. Never an email, phone, position, or anyone else's name.
+- **Rate limits** in a small `public_rate_limit` table: generous per IP, because a whole room shares the venue wifi (about 60 tries per 10 minutes per meeting), plus about 10 tries per email per meeting. A hidden honeypot field stops simple bots. Messages are generic.
+- **Written by the public, reviewed by editors**: new people, newly claimed units, and "I'm not with this unit anymore" go to a review list. Roster data is never overwritten by what someone types at the door.
+
+### 6A. Self check-in (built)
+
+Built as planned: `app/(public)/m/[token]` with `lib/selfcheckin/rules.ts` (window, matching) and `lib/selfcheckin/service.ts` (every public step, the link, the review list); migration 0009 adds `meeting.public_token`, `contact.pending_review`, `attendance.units_confirmed`, `attendance_unit`, `checkin_review`, and `public_rate_limit`. The meeting page has the Self check-in card (QR drawn in the browser, copy, download, reset) and the To review list; the volunteer's check-in board refreshes every 15 seconds while the window is open. Verified with a DB test of every path and a phone-viewport browser run.
+
+
+- **Window**: from 30 minutes before `start_time` to 30 minutes after `end_time` (start plus 2 hours if there's no end), in `APP_TIME_ZONE`. No start time, no window: the link stays closed and the meeting page tells editors to add one. Outside the window the page says when check-in opens, or that it has closed (6C fills the "before" side with RSVP).
+- **Known person, units on record**: "Hi Sam. You're checking in and representing Pack 12, Troop 40 & Crew 7." Each unit can be unticked for tonight (not removed from their record), "Not with Troop 40 anymore?" files a removal for review, and "Representing another unit?" adds one from the district unit list, with an optional role. One unit: "...representing Pack 12. Representing more? Add them below." No units: "Which unit are you representing tonight?" plus "District, no unit".
+- **New person**: first name, last name, email, units, and "I'm 18 or older" (required; under 18 is told to check in with the volunteer at the table). Creates a contact with source `self_check_in` and `review_status = 'pending'`, checked in right away. Pending contacts are left out of every audience (a new reach reason, "Waiting for review") and carry a "To review" badge in contacts.
+- **What counts toward coverage**: a new `attendance_unit (attendance_id, unit_id, approved)` table records the units each check-in represented. Units already on their record count at once; newly claimed units count once an editor approves them. A check-in with no rows keeps today's rule (`attendance.unit_id`, else all their units), so existing data doesn't change.
+- **Review list** on the meeting page (editors): new people (approve, "it's actually..." to fold them into an existing contact by moving the check-in and deleting the duplicate, or reject), unit claims (approve adds a hand-added affiliation with the role given, default "Unit volunteer (self-reported)"), and removals (approve deletes a hand-added affiliation; a roster affiliation is only noted, since the next import is the source of truth). Each review is audited.
+- **Editor tools** on the meeting page: a Self check-in card with the window ("Opens at 6:30 pm", "Open now", "Closed"), the QR code drawn in the browser (the `qrcode` package; never an outside QR service, which would see the token), copy link, and reset link. The check-in board tags self check-ins and refreshes every 15 seconds while the window is open.
+- **Tests**: pure tests for the window and matching normalization. DB tests for a match, no match, youth and archived never matched, a shared family email, idempotent check-in, a claim pending until approved and counted after, a removal, "it's actually...", outside-window and reset-token refusals, and rate limits. A browser check on a phone viewport.
+
+### 6B. Meeting place and join link, and filling an announcement from a meeting
+
+- `meeting.place` (text) and `meeting.join_url` (https only), edited with the other meeting fields and shown on the meeting page. On the public page the join link appears only after someone is matched or RSVPs, so posting the QR code doesn't hand out the Zoom link.
+- In Announcements, a "For meeting" picker of upcoming meetings fills the template's blanks in the text itself, where the sender can still edit them: `[day, date]`, `[date]`, `[time]`, and `[place]` ("on Zoom" for virtual, "at the library or on Zoom" for hybrid), and a button with no address gets the meeting's RSVP link (making the token if needed). The draft warnings then clear on their own.
+
+### 6C. RSVP
+
+- Before the window, the same page asks "Coming to roundtable on Thu, Nov 19 at 7:00 pm?" Email plus last name, then "I'll be there" or "Can't make it". Changing your answer is fine. A new person gets the same form as check-in and lands in review.
+- `rsvp (meeting_id, contact_id, response, updated_at)`, one per person per meeting.
+- After answering yes: the join link for virtual or hybrid meetings, and an "Add to calendar" .ics file.
+- Meeting page (editors): RSVP counts and the list. The check-in board marks who said yes, to speed up the door.
+- Audiences for each upcoming meeting: "Said yes to Nov 19" and "Hasn't answered for Nov 19", for reminders.
+
+### 6D. Reminders
+
+- First verify two things: how often cron can run on this Vercel plan, and whether Resend broadcasts can be scheduled ahead. Then pick: a daily Vercel cron (protected by `CRON_SECRET`) that sends what's due, which picks up whoever is in the group on the day, or Resend's scheduling for anything that must go at a set hour, where the group is fixed when it's scheduled.
+- Scheduled announcements: `announcement.scheduled_for` and a `scheduled` status, written ahead with the same editor and the "For meeting" fill, listed with a cancel button, and audited.
+- Defaults to confirm with AJ before building: a week before to unit leaders, and the day before to "Said yes" with the join link.
+
+### Defaults chosen so the build can start (AJ can change any)
+
+1. A meeting with no start time keeps self check-in closed.
+2. A claimed unit asks for an optional role; the default is "Unit volunteer (self-reported)".
+3. The join link appears only after a match or an RSVP.
+4. Reminders wait for AJ's answer on timing and audiences (6D).
+
 ## Demo and screenshots
 
 - `scripts/demo/data.mjs` generates a made-up district, the same every run: 18 units (plus one new on the unit list and one with no members), about 100 adults with positions, youth rows the import skips, last year's sign-in sheet with nicknames, a first name alone, a last initial, and a typo, and a Zoom report with a renamed attendee and a device.
@@ -327,7 +380,6 @@ Verified locally against Postgres 16 with a browser test: unknown email gets no 
 
 - Contact change history: who changed what, with old and new values, shown on the contact page. Today `audit_log` records who, when, and which fields, but not the values.
 
-- QR self check-in at the door. Needs a public form that never reveals the roster.
 - Roundtable planning: topics, speakers, agenda archive.
 - Commissioner follow-up notes per unit.
 - Short feedback survey after each roundtable.

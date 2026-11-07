@@ -33,6 +33,8 @@ export type ContactListItem = {
   multipleRegistrations: boolean;
   /** Unsubscribed from announcements; left out of announcements and copy-emails. */
   unsubscribed: boolean;
+  /** Added themselves at self check-in and waiting for an editor. */
+  pendingReview: boolean;
   affiliations: AffiliationView[];
 };
 
@@ -107,6 +109,7 @@ function toListItem(c: typeof contact.$inferSelect, affs: AffiliationView[]): Co
     source: c.source,
     multipleRegistrations: c.multipleRegistrations,
     unsubscribed: c.unsubscribedAt !== null,
+    pendingReview: c.pendingReview,
     affiliations: affs,
   };
 }

@@ -67,10 +67,22 @@ export function AttendeesTable({ attendees, canEdit, meetingId }: { attendees: A
                   Youth
                 </Badge>
               )}
+              {a.pendingReview && (
+                <Badge variant="outline" className="ml-2" title="Added themselves at self check-in. Approve or remove them in the review list.">
+                  To review
+                </Badge>
+              )}
               <div className="text-xs text-muted-foreground">{a.email}</div>
             </TableCell>
             <TableCell className="align-top">
-              {a.units.length === 0 ? (
+              {a.confirmedUnitIds ? (
+                // They said which units at self check-in; claims count once approved.
+                <span className="text-sm">
+                  {a.units.filter((u) => a.confirmedUnitIds!.includes(u.id)).map((u) => u.label).join(", ") || (
+                    <span className="text-muted-foreground">No unit tonight</span>
+                  )}
+                </span>
+              ) : a.units.length === 0 ? (
                 <span className="text-sm text-muted-foreground">No unit</span>
               ) : canEdit && a.units.length > 1 ? (
                 <Select

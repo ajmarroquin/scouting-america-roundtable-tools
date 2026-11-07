@@ -168,7 +168,7 @@ export const unit = pgTable(
 );
 
 export const CONTACT_STATUSES = ["active", "not_in_roster", "archived"] as const;
-export const CONTACT_SOURCES = ["import", "manual", "walk_in"] as const;
+export const CONTACT_SOURCES = ["import", "manual", "walk_in", "self_check_in"] as const;
 
 export const contact = pgTable(
   "contact",
@@ -190,6 +190,8 @@ export const contact = pgTable(
     // Set when they unsubscribe from announcements (from Resend). Announcements
     // and copy-emails leave them out from then on.
     unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+    // Added themselves at self check-in: left out of announcements until an editor approves them.
+    pendingReview: boolean("pending_review").notNull().default(false),
     status: text("status").notNull().default("active"),
     source: text("source").notNull().default("manual"),
     // The export flags people registered in more than one place but lists them once.
@@ -202,7 +204,7 @@ export const contact = pgTable(
     index("contact_email_idx").on(t.email),
     index("contact_name_idx").on(t.lastName, t.firstName),
     check("contact_status_check", sql`${t.status} in ('active', 'not_in_roster', 'archived')`),
-    check("contact_source_check", sql`${t.source} in ('import', 'manual', 'walk_in')`),
+    check("contact_source_check", sql`${t.source} in ('import', 'manual', 'walk_in', 'self_check_in')`),
     // Youth Protection: no youth contact without a parent or guardian to copy.
     check("contact_youth_guardian_check", sql`not ${t.isYouth} or ${t.guardianEmail} is not null`),
   ],
@@ -273,7 +275,7 @@ export const setting = pgTable("setting", {
 
 export const MEETING_FORMATS = ["in_person", "virtual", "hybrid"] as const;
 export const MEETING_STATUSES = ["held", "cancelled"] as const;
-export const ATTENDANCE_METHODS = ["check_in", "walk_in", "pasted_list", "legacy_import", "manual"] as const;
+export const ATTENDANCE_METHODS = ["check_in", "walk_in", "pasted_list", "legacy_import", "manual", "self_check_in"] as const;
 
 export const meeting = pgTable(
   "meeting",
@@ -283,6 +285,8 @@ export const meeting = pgTable(
     // Local times in APP_TIME_ZONE. Optional; self check-in opens 30 minutes before the start.
     startTime: time("start_time"),
     endTime: time("end_time"),
+    // The self check-in link (/m/<token>). Made when an editor first shows the QR code; reset if it spreads.
+    publicToken: text("public_token").unique(),
     title: text("title"),
     format: text("format").notNull().default("in_person"),
     status: text("status").notNull().default("held"),
@@ -309,6 +313,8 @@ export const attendance = pgTable(
     // The unit they came for, when it matters. Null means all of their units count.
     unitId: uuid("unit_id").references(() => unit.id, { onDelete: "set null" }),
     method: text("method").notNull().default("check_in"),
+    // The person said which units they represent (self check-in): only their approved attendance_unit rows count.
+    unitsConfirmed: boolean("units_confirmed").notNull().default(false),
     checkedInAt: timestamp("checked_in_at", { withTimezone: true }).notNull().defaultNow(),
     checkedInBy: text("checked_in_by").references(() => user.id, { onDelete: "set null" }),
   },
@@ -317,7 +323,7 @@ export const attendance = pgTable(
     index("attendance_contact_idx").on(t.contactId),
     check(
       "attendance_method_check",
-      sql`${t.method} in ('check_in', 'walk_in', 'pasted_list', 'legacy_import', 'manual')`,
+      sql`${t.method} in ('check_in', 'walk_in', 'pasted_list', 'legacy_import', 'manual', 'self_check_in')`,
     ),
   ],
 );
@@ -348,3 +354,57 @@ export const announcement = pgTable(
     check("announcement_status_check", sql`${t.status} in ('sent', 'failed')`),
   ],
 );
+
+// The units one check-in represented, when the person said so at self check-in.
+// A check-in with rows here counts only its approved units; one without keeps
+// the older rule (attendance.unit_id, else all of the person's units).
+export const attendanceUnit = pgTable(
+  "attendance_unit",
+  {
+    attendanceId: uuid("attendance_id")
+      .notNull()
+      .references(() => attendance.id, { onDelete: "cascade" }),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references(() => unit.id, { onDelete: "cascade" }),
+    // Units on their record count at once; a unit they claimed counts once an editor approves it.
+    approved: boolean("approved").notNull().default(true),
+  },
+  (t) => [primaryKey({ columns: [t.attendanceId, t.unitId] })],
+);
+
+export const REVIEW_KINDS = ["new_person", "add_unit", "remove_unit"] as const;
+export const REVIEW_STATUSES = ["open", "approved", "rejected", "merged"] as const;
+
+// What people said about themselves at self check-in, for an editor to approve.
+export const checkinReview = pgTable(
+  "checkin_review",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => meeting.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contact.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    unitId: uuid("unit_id").references(() => unit.id, { onDelete: "cascade" }),
+    role: text("role"),
+    status: text("status").notNull().default("open"),
+    createdAt: createdAt(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: text("resolved_by").references(() => user.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    index("checkin_review_meeting_idx").on(t.meetingId, t.status),
+    check("checkin_review_kind_check", sql`${t.kind} in ('new_person', 'add_unit', 'remove_unit')`),
+    check("checkin_review_status_check", sql`${t.status} in ('open', 'approved', 'rejected', 'merged')`),
+  ],
+);
+
+// Counters for the public pages, which have no signed-in user to limit.
+export const publicRateLimit = pgTable("public_rate_limit", {
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
+  count: integer("count").notNull().default(0),
+});

@@ -6,6 +6,8 @@ export type AttendeeUnits = {
   representedUnitId: string | null;
   /** Every unit the person is affiliated with. */
   unitIds: string[];
+  /** Units the person confirmed at self check-in (approved only). When set, only these count, even if empty. */
+  confirmedUnitIds?: string[] | null;
 };
 
 /**
@@ -15,7 +17,8 @@ export type AttendeeUnits = {
 export function unitsRepresented(attendees: AttendeeUnits[]): Set<string> {
   const units = new Set<string>();
   for (const a of attendees) {
-    if (a.representedUnitId) units.add(a.representedUnitId);
+    if (a.confirmedUnitIds) for (const id of a.confirmedUnitIds) units.add(id);
+    else if (a.representedUnitId) units.add(a.representedUnitId);
     else for (const id of a.unitIds) units.add(id);
   }
   return units;

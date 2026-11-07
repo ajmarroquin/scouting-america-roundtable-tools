@@ -22,7 +22,11 @@ Check people in on a phone: type a few letters of a name or unit and tap. Someon
 
 <img src="docs/screenshots/check-in-phone.png" alt="Checking people in on a phone" width="300">
 
-Meetings are listed by scouting year, held or cancelled, with an export in the shape of the old sign-in sheet.
+Or let people check themselves in. Each meeting has a QR code and link that open 30 minutes before it starts and close 30 minutes after it ends. People enter their email and last name and see only their own first name and units: they confirm which units they represent tonight, add one, or say they've left one. Anyone new, and any unit change, waits for an editor to approve it, so the roster never changes from what someone types at the door.
+
+<img src="docs/screenshots/self-check-in.png" alt="Checking yourself in on a phone and confirming your units" width="300">
+
+Meetings are listed by scouting year, held, upcoming, or cancelled, with start and end times and an export in the shape of the old sign-in sheet.
 
 ![Roundtables for a scouting year](docs/screenshots/attendance.png)
 

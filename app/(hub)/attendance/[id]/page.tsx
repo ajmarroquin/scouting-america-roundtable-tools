@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { checkInPeople, getMeeting } from "@/lib/attendance/queries";
 import { hhmm, isUpcoming, timeRange } from "@/lib/attendance/schedule";
-import { appToday } from "@/lib/attendance/today";
+import { appTimeZone, appToday } from "@/lib/attendance/today";
+import { checkInWindow, clockIn } from "@/lib/selfcheckin/rules";
+import { openReviews } from "@/lib/selfcheckin/service";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import { FORMAT_LABELS } from "@/lib/attendance/labels";
 import { hasRole } from "@/lib/auth/roles";
@@ -16,6 +18,8 @@ import { requireUser } from "@/lib/auth/session";
 import { AttendeesTable, DeleteMeetingButton, ExportMeetingButton, MeetingEditor } from "./meeting-detail";
 import { CoverageCards } from "./coverage-cards";
 import { PasteList } from "./paste-list";
+import { ReviewList } from "./review-list";
+import { SelfCheckInCard } from "./self-check-in-card";
 
 export const metadata: Metadata = { title: "Meeting" };
 
@@ -44,7 +48,19 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
   const upcoming = m.status === "held" && isUpcoming(m.date, today);
   // Check-in and the numbers start on the day; until then it's just on the calendar.
   const held = m.status === "held" && !upcoming;
-  const people = canEdit && held ? await checkInPeople() : [];
+  const [people, reviews] = canEdit && held ? await Promise.all([checkInPeople(), openReviews(m.id)]) : [[], []];
+  const tz = appTimeZone();
+  const w = checkInWindow(m, new Date(), tz);
+  const selfStatus =
+    w.state === "no_time"
+      ? "Add a start time below to open it. People can check themselves in from 30 minutes before the start to 30 minutes after the end."
+      : w.state === "before"
+        ? `Opens at ${clockIn(w.opensAt, tz)} on ${meetingDateLabel(m.date, "short")} and closes at ${clockIn(w.closesAt, tz)}. You can share the link ahead of time.`
+        : w.state === "open"
+          ? `Open now, until ${clockIn(w.closesAt, tz)}.`
+          : w.state === "after"
+            ? `Closed at ${clockIn(w.closesAt, tz)}.`
+            : "";
 
   return (
     <>
@@ -85,11 +101,17 @@ async function MeetingView({ params }: { params: PageProps<"/attendance/[id]">["
         </p>
       )}
 
+      {canEdit && <ReviewList reviews={reviews} people={people} />}
+
       {held && <CoverageCards meetingId={m.id} date={m.date} />}
 
       {canEdit && held && <PasteList meetingId={m.id} people={people} />}
 
       {!upcoming && <AttendeesTable attendees={attendees} canEdit={canEdit} meetingId={m.id} />}
+
+      {canEdit && m.status === "held" && (
+        <SelfCheckInCard meetingId={m.id} token={m.publicToken} status={selfStatus} fileName={`roundtable-check-in-${m.date}.png`} />
+      )}
 
       {canEdit && (
         <MeetingEditor

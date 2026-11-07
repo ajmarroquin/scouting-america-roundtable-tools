@@ -10,6 +10,7 @@ import * as att from "@/lib/attendance/mutations";
 import { attendanceForExport } from "@/lib/attendance/queries";
 import { yearRange } from "@/lib/attendance/year";
 import type { NewContactInput } from "@/lib/contacts/mutations";
+import * as sci from "@/lib/selfcheckin/service";
 
 type Result = att.Result;
 
@@ -81,4 +82,32 @@ export async function exportAttendanceAction(year: string): Promise<ExportResult
   if (!/^\d{4}-\d{2}$/.test(year)) return { ok: false, message: "Unknown scouting year." };
   await requireUser();
   return { ok: true, ...(await attendanceForExport(yearRange(year))) };
+}
+
+// Self check-in: the meeting's public link, and the review list of what people said about themselves.
+
+export async function checkInLinkAction(meetingId: string): Promise<Result & { token?: string }> {
+  return withRole("editor", async (actor) => {
+    const r = await sci.ensureToken(actor, String(meetingId));
+    return r.ok ? { ok: true, message: "Here's the link.", token: r.token } : r;
+  });
+}
+
+export async function resetCheckInLinkAction(meetingId: string): Promise<Result & { token?: string }> {
+  return withRole("editor", async (actor) => {
+    const r = await sci.resetToken(actor, String(meetingId));
+    return r.ok ? { ok: true, message: "New link made. The old link and QR code no longer work.", token: r.token } : r;
+  });
+}
+
+export async function approveReviewAction(reviewId: string): Promise<Result> {
+  return withRole("editor", (actor) => sci.approveReview(actor, String(reviewId)));
+}
+
+export async function rejectReviewAction(reviewId: string): Promise<Result> {
+  return withRole("editor", (actor) => sci.rejectReview(actor, String(reviewId)));
+}
+
+export async function mergeReviewAction(reviewId: string, intoContactId: string): Promise<Result> {
+  return withRole("editor", (actor) => sci.mergeReview(actor, String(reviewId), String(intoContactId)));
 }

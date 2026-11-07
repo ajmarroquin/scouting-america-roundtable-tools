@@ -19,6 +19,7 @@ export const METHOD_LABELS: Record<string, string> = {
   pasted_list: "Pasted list",
   legacy_import: "Old sheet",
   manual: "Added by hand",
+  self_check_in: "Checked in themselves",
 };
 
 /**

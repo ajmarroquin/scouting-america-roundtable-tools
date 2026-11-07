@@ -303,6 +303,31 @@ await admin
 await admin.getByLabel("Message").evaluate((el) => el.setSelectionRange(0, 0));
 await shot(admin, "announcements");
 
+// Self check-in: a meeting happening now, its QR link, and a leader checking in on a phone.
+const zoned = (d, opts) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", ...opts }).format(d);
+const at = (minutes) => zoned(new Date(Date.now() + minutes * 60000), { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+await open(admin, "/attendance");
+await admin.locator("#new-date").fill(zoned(new Date(), { year: "numeric", month: "2-digit", day: "2-digit" }));
+await admin.locator("#new-start").fill(at(-10));
+await admin.locator("#new-end").fill(at(80));
+await admin.getByLabel("Topic (optional)").first().fill("Spring program planning");
+await admin.getByRole("button", { name: "Add meeting" }).click();
+await admin.waitForURL(/\/attendance\/[0-9a-f-]{36}$/);
+await admin.getByRole("button", { name: "Show QR code and link" }).click();
+const checkInLink = await admin.locator("p.font-mono").innerText();
+const guest = await (await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light" })).newPage();
+const leader = world.adults.find((a) => a.email && a.units.length === 1);
+await guest.goto(checkInLink);
+await guest.getByLabel("Email").fill(leader.email);
+await guest.getByLabel("Last name").fill(leader.last);
+await guest.getByRole("button", { name: "Find me" }).click();
+await guest.getByText(/^Hi /).waitFor();
+await guest.getByRole("combobox", { name: "Unit" }).click();
+await guest.getByRole("option").nth(1).click();
+await guest.getByLabel("Your role (optional)").fill("Committee Member");
+await guest.getByRole("button", { name: "Add", exact: true }).click();
+await shot(guest, "self-check-in", true);
+
 await browser.close();
 stop();
 console.log(`demo: done. Screenshots in ${path.relative(root, OUT)}/`);
