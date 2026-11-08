@@ -12,7 +12,7 @@ import { hhmm, isUpcoming, timeRange } from "@/lib/attendance/schedule";
 import { appTimeZone, appToday } from "@/lib/attendance/today";
 import { checkInWindow, clockIn } from "@/lib/selfcheckin/rules";
 import { KIND_LABELS } from "@/lib/reminders/rules";
-import { remindersFor } from "@/lib/reminders/service";
+import { remindersFor, timingFor } from "@/lib/reminders/service";
 import { openReviews, rsvpsFor } from "@/lib/selfcheckin/service";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import { FORMAT_LABELS } from "@/lib/attendance/labels";
@@ -177,6 +177,7 @@ async function MeetingView({ params }: { params: PageProps<"/roundtables/[id]">[
             subject: r.subject,
             status: r.status,
             error: r.error,
+            timing: r.status === "sent" ? null : timingFor(r),
           }))}
         />
       )}

@@ -11,7 +11,7 @@ import type { CurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { meeting, publicRateLimit, reminder, user } from "@/lib/db/schema";
 import { ensureToken } from "@/lib/selfcheckin/service";
-import { isDue, type ReminderKind, reminderDraft, sendDay } from "./rules";
+import { isDue, type ReminderKind, reminderDraft, reminderTiming, sendDay } from "./rules";
 
 type Result = { ok: boolean; message: string };
 
@@ -20,6 +20,7 @@ export type ReminderRow = {
   meetingId: string;
   meetingDate: string;
   meetingTitle: string | null;
+  meetingStatus: string;
   kind: ReminderKind;
   sendOn: string;
   audience: string;
@@ -34,7 +35,7 @@ export type ReminderRow = {
 
 function select() {
   return db
-    .select({ r: reminder, m: { id: meeting.id, date: meeting.date, title: meeting.title }, approver: { name: user.name, email: user.email } })
+    .select({ r: reminder, m: { id: meeting.id, date: meeting.date, title: meeting.title, status: meeting.status }, approver: { name: user.name, email: user.email } })
     .from(reminder)
     .innerJoin(meeting, eq(meeting.id, reminder.meetingId))
     .leftJoin(user, eq(user.id, reminder.approvedBy));
@@ -46,6 +47,7 @@ const row = ({ r, m, approver }: Joined): ReminderRow => ({
   meetingId: m.id,
   meetingDate: m.date,
   meetingTitle: m.title,
+  meetingStatus: m.status,
   kind: r.kind as ReminderKind,
   sendOn: sendDay(m.date, r.kind as ReminderKind),
   audience: r.audience,
@@ -119,9 +121,11 @@ export async function approveReminder(actor: CurrentUser, id: string): Promise<R
   if (!checked.ok) return checked;
   if (!(await audienceInfo(r.audience))) return { ok: false, message: "Its audience no longer exists. Pick another and save." };
   if (r.meetingDate < appToday()) return { ok: false, message: "That meeting has passed." };
+  const timing = timingFor(r);
+  if (timing?.tooLate) return { ok: false, message: timing.note };
   await db.update(reminder).set({ status: "approved", approvedBy: actor.id, approvedAt: new Date(), error: null }).where(eq(reminder.id, id));
   await writeAudit(actor, "reminder.approve", { type: "reminder", id }, { sendOn: r.sendOn, audience: r.audience });
-  return { ok: true, message: "Approved. It goes out at 9 am on its day." };
+  return { ok: true, message: timing ? `Approved. ${timing.note}` : "Approved. It goes out at 9 am on its day." };
 }
 
 export async function unapproveReminder(actor: CurrentUser, id: string): Promise<Result> {
@@ -144,6 +148,11 @@ export async function deleteReminder(actor: CurrentUser, id: string): Promise<Re
 /** The hour of the day in the district's zone. */
 function localHour(now: Date): number {
   return Number(new Intl.DateTimeFormat("en-US", { timeZone: appTimeZone(), hour: "numeric", hourCycle: "h23" }).format(now));
+}
+
+/** A note when a reminder isn't simply going on its day: late (next 9 am run) or too late. */
+export function timingFor(r: Pick<ReminderRow, "kind" | "meetingDate" | "meetingStatus">, now = new Date()) {
+  return reminderTiming(r.kind, { date: r.meetingDate, status: r.meetingStatus }, todayIn(appTimeZone(), now), localHour(now));
 }
 
 /**

@@ -8,7 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { deleteReminderAction, draftUsualRemindersAction } from "../../announcements/actions";
 
-type Item = { id: string; kindLabel: string; sendLabel: string; subject: string; status: "draft" | "approved" | "sent" | "failed"; error: string | null };
+type Item = {
+  id: string;
+  kindLabel: string;
+  sendLabel: string;
+  subject: string;
+  status: "draft" | "approved" | "sent" | "failed";
+  error: string | null;
+  /** Late (goes at the next 9 am run) or too late to send. */
+  timing: { note: string; tooLate: boolean } | null;
+};
 
 const STATUS: Record<Item["status"], string> = { draft: "Draft, not approved", approved: "Approved", sent: "Sent", failed: "Didn't send" };
 
@@ -40,6 +49,9 @@ export function RemindersCard({ meetingId, items, canDraft }: { meetingId: strin
               </div>
               <div className="truncate text-muted-foreground">{r.subject}</div>
               {r.status === "failed" && r.error && <div className="text-xs text-destructive">{r.error}</div>}
+              {r.timing && (
+                <div className={r.timing.tooLate ? "text-xs text-destructive" : "text-xs text-amber-700 dark:text-amber-400"}>{r.timing.note}</div>
+              )}
             </div>
             <div className="flex gap-1">
               <Button size="sm" variant={r.status === "draft" || r.status === "failed" ? "default" : "outline"} asChild>

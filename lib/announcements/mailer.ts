@@ -9,8 +9,15 @@ export type Member = { email: string; firstName: string; lastName: string };
 export interface BroadcastMailer {
   /** Every address that unsubscribed in Resend. */
   unsubscribedEmails(): Promise<string[]>;
-  /** Makes a Resend segment hold exactly these people. Returns its id. */
-  syncSegment(name: string, segmentId: string | null, members: Member[]): Promise<string>;
+  /**
+   * Deletes the segments this app made (names starting with the prefix) that
+   * are older than the cutoff. Resend's plan caps how many segments exist, so
+   * each send makes its own and the old ones go once their broadcast is out.
+   * Contacts and their unsubscribes stay; only the grouping goes.
+   */
+  clearSegments(prefix: string, olderThan: Date): Promise<number>;
+  /** Makes a new segment holding exactly these people. Returns its id. */
+  createSegment(name: string, members: Member[]): Promise<string>;
   /** Creates and sends a broadcast to a segment. Returns the broadcast id. */
   sendBroadcast(opts: { segmentId: string; name: string; from: string; replyTo: string; subject: string; html: string; text: string }): Promise<string>;
   /** One email to one person, for a test. */
@@ -43,15 +50,24 @@ export class ResendMailer implements BroadcastMailer {
     return out;
   }
 
-  async syncSegment(name: string, segmentId: string | null, members: Member[]): Promise<string> {
-    let id = segmentId;
-    if (id) {
-      const found = await this.resend.segments.get(id);
-      if (found.error) id = null;
+  async clearSegments(prefix: string, olderThan: Date): Promise<number> {
+    const old: string[] = [];
+    let after: string | undefined;
+    for (let page = 0; page < 20; page++) {
+      const data = unwrap(await this.resend.segments.list(after ? { limit: 100, after } : { limit: 100 }));
+      for (const seg of data.data) if (seg.name.startsWith(prefix) && new Date(seg.created_at) < olderThan) old.push(seg.id);
+      if (!data.has_more || !data.data.length) break;
+      after = data.data.at(-1)!.id;
     }
-    if (!id) id = unwrap(await this.resend.segments.create({ name })).id;
+    // One that won't delete is left for next time rather than stopping the send.
+    let cleared = 0;
+    for (const id of old) if (!(await this.resend.segments.remove(id)).error) cleared++;
+    return cleared;
+  }
 
-    // Add everyone in one import. Upsert updates names; leaving out the
+  async createSegment(name: string, members: Member[]): Promise<string> {
+    const id = unwrap(await this.resend.segments.create({ name })).id;
+    // Everyone in one import. Upsert updates names; leaving out the
     // "unsubscribed" column keeps whatever each person chose.
     const csv = ["email,first_name,last_name", ...members.map((m) => [m.email, m.firstName, m.lastName].map(csvCell).join(","))].join("\n");
     const started = unwrap(
@@ -68,18 +84,6 @@ export class ResendMailer implements BroadcastMailer {
       if (status.status === "failed") throw new Error("Resend: import_failed: The contact import failed.");
       if (i > 40) throw new Error("Resend: import_timeout: The contact import is taking too long. Try again in a minute.");
       await sleep(1000);
-    }
-
-    // Take out anyone who's no longer in this audience.
-    const keep = new Set(members.map((m) => m.email.toLowerCase()));
-    let after: string | undefined;
-    for (let page = 0; page < 100; page++) {
-      const data = unwrap(await this.resend.contacts.list(after ? { segmentId: id, limit: 100, after } : { segmentId: id, limit: 100 }));
-      for (const c of data.data) {
-        if (!keep.has(c.email.toLowerCase())) unwrap(await this.resend.contacts.segments.remove({ contactId: c.id, segmentId: id }));
-      }
-      if (!data.has_more || !data.data.length) break;
-      after = data.data.at(-1)!.id;
     }
     return id;
   }
@@ -109,9 +113,12 @@ export class DevMailer implements BroadcastMailer {
   async unsubscribedEmails() {
     return (process.env.DEV_UNSUBSCRIBED ?? "").split(",").map((e) => e.trim()).filter(Boolean);
   }
-  async syncSegment(name: string, segmentId: string | null, members: Member[]) {
-    console.info(`[broadcast:dev] segment "${name}" now has ${members.length} people`);
-    return segmentId ?? `dev-segment-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  async clearSegments() {
+    return 0;
+  }
+  async createSegment(name: string, members: Member[]) {
+    console.info(`[broadcast:dev] segment "${name}" has ${members.length} people`);
+    return `dev-segment-${Date.now()}`;
   }
   async sendBroadcast(opts: { segmentId: string; subject: string; replyTo: string }) {
     console.info(`[broadcast:dev] sent "${opts.subject}" to ${opts.segmentId} reply-to=${opts.replyTo}`);

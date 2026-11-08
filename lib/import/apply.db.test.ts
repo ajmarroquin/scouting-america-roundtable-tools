@@ -457,21 +457,31 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(history.meetings[0].method).toBe("pasted_list");
   });
 
-  it("sends announcements: audiences, unsubscribes pulled back, the segment synced, and failures recorded", async () => {
+  it("sends announcements: audiences, unsubscribes pulled back, a fresh segment each time, and failures recorded", async () => {
     const audiences = await import("@/lib/announcements/audiences");
     const send = await import("@/lib/announcements/send");
     process.env.EMAIL_FROM = "Roundtable Tools <no-reply@example.org>";
-    const calls: { sync: { name: string; id: string | null; emails: string[] }[]; broadcasts: Record<string, string>[]; tests: Record<string, string>[] } = {
+    const calls: {
+      sync: { name: string; emails: string[] }[];
+      cleared: { prefix: string; olderThan: Date }[];
+      broadcasts: Record<string, string>[];
+      tests: Record<string, string>[];
+    } = {
       sync: [],
+      cleared: [],
       broadcasts: [],
       tests: [],
     };
     let failWith: string | null = null;
     const mailer = {
       unsubscribedEmails: async () => ["ALEX@example.com"],
-      syncSegment: async (name: string, id: string | null, members: { email: string }[]) => {
-        calls.sync.push({ name, id, emails: members.map((m) => m.email) });
-        return id ?? "seg-1";
+      clearSegments: async (prefix: string, olderThan: Date) => {
+        calls.cleared.push({ prefix, olderThan });
+        return 0;
+      },
+      createSegment: async (name: string, members: { email: string }[]) => {
+        calls.sync.push({ name, emails: members.map((m) => m.email) });
+        return `seg-${calls.sync.length}`;
       },
       sendBroadcast: async (opts: Record<string, string>) => {
         if (failWith) throw new Error(failWith);
@@ -518,7 +528,10 @@ describe.skipIf(!local)("import against Postgres", () => {
     // Alex unsubscribed in Resend: marked here, and left out of the segment.
     const [alex] = await db.select().from(schema.contact).where(eq(schema.contact.memberId, "900000001"));
     expect(alex.unsubscribedAt).not.toBeNull();
-    expect(calls.sync[0]).toMatchObject({ name: "Roundtable Tools: Everyone in contacts", id: null });
+    expect(calls.sync[0]).toMatchObject({ name: "Roundtable Tools: Everyone in contacts" });
+    // Old segments this app made are cleared first, keeping any from the last 15 minutes.
+    expect(calls.cleared[0].prefix).toBe("Roundtable Tools: ");
+    expect(Date.now() - calls.cleared[0].olderThan.getTime()).toBeGreaterThanOrEqual(15 * 60 * 1000 - 1000);
     expect(calls.sync[0].emails).not.toContain("alex@example.com");
     expect(calls.sync[0].emails.length).toBe(everyoneBefore.length - 1);
     expect(calls.broadcasts[0]).toMatchObject({ segmentId: "seg-1", replyTo: "admin@example.com", subject: "Nov roundtable" });
@@ -529,9 +542,10 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(calls.broadcasts[0].html).toContain("Popcorn and pizza");
     expect(calls.broadcasts[0].html).toContain("Sample Council · Big Apple District");
 
-    // The next send reuses the segment.
+    // Each send gets its own segment, so Resend's segment cap isn't used up by audiences.
     await send.sendAnnouncement(actor, { audience: "everyone", subject: "Reminder", body: "Tomorrow." }, mailer);
-    expect(calls.sync[1].id).toBe("seg-1");
+    expect(calls.broadcasts[1].segmentId).toBe("seg-2");
+    expect(calls.cleared).toHaveLength(2);
 
     failWith = "Resend: restricted_api_key: This API key is restricted to only send emails";
     const failed = await send.sendAnnouncement(actor, { audience: "unit-leaders", subject: "Leaders", body: "Hello." }, mailer);
@@ -555,7 +569,8 @@ describe.skipIf(!local)("import against Postgres", () => {
     const sent: Record<string, string>[] = [];
     const mailer = {
       unsubscribedEmails: async () => [],
-      syncSegment: async (_name: string, id: string | null) => id ?? "seg-group",
+      clearSegments: async () => 0,
+      createSegment: async () => "seg-group",
       sendBroadcast: async (opts: Record<string, string>) => {
         sent.push(opts);
         return "bc-group";
@@ -878,7 +893,8 @@ describe.skipIf(!local)("import against Postgres", () => {
     const broadcasts: Record<string, string>[] = [];
     const mailer = {
       unsubscribedEmails: async () => [],
-      syncSegment: async (_n: string, id: string | null) => id ?? "seg-r",
+      clearSegments: async () => 0,
+      createSegment: async () => "seg-r",
       sendBroadcast: async (opts: Record<string, string>) => {
         broadcasts.push(opts);
         return "bc-r";
@@ -947,6 +963,22 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(await rem.deleteReminder(actor, day.id)).toMatchObject({ ok: true });
     expect(await rem.deleteReminder(actor, week.id)).toMatchObject({ ok: false });
   });
+  it("lets a late week-before go while the meeting is two or more days off, and refuses it after", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const rem = await import("@/lib/reminders/service");
+    // Today is Feb 1, 2027, past 9 am Eastern, so the next run is tomorrow.
+    const meetingOn = async (date: string) => {
+      const made = await att.createMeeting(actor, { date, startTime: "19:00", endTime: "20:30", title: "", format: "in_person", status: "held", notes: "", place: "", joinUrl: "" });
+      await rem.draftUsual(actor, made.id!, "https://rt.example.org");
+      return (await rem.remindersFor(made.id!)).find((r) => r.kind === "week_before")!;
+    };
+    const late = await meetingOn("2027-02-05");
+    expect(rem.timingFor(late)).toEqual({ note: expect.stringContaining("next 9 am run, tomorrow"), tooLate: false });
+    expect(await rem.approveReminder(actor, late.id)).toMatchObject({ ok: true, message: expect.stringContaining("tomorrow") });
+    const tooLate = await meetingOn("2027-02-03");
+    expect(await rem.approveReminder(actor, tooLate.id)).toMatchObject({ ok: false, message: expect.stringContaining("Too late") });
+  });
+
   it("compares a list with contacts and adds the people it's missing", async () => {
     const lists = await import("@/lib/contacts/list-compare");
     const { compareToContacts } = await import("@/lib/contacts/compare");

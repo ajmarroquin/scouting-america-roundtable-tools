@@ -17,10 +17,20 @@ export function sendDay(meetingDate: string, kind: ReminderKind): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** A week-before reminder whose day has passed still goes if the meeting is at least this many days off. */
+export const LATE_MIN_DAYS = 2;
+
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 /**
  * Whether the daily job should send a reminder now: approved, for a meeting
  * still on, its day has come, the meeting hasn't passed, and it's 9 am or later.
- * A reminder approved after its day (a week-before drafted late) goes at the next run.
+ * A week-before approved after its day goes at the next run while the meeting is
+ * still two or more days off; closer than that, the day-of reminder covers it.
  */
 export function isDue(
   r: { kind: ReminderKind; status: string },
@@ -28,7 +38,36 @@ export function isDue(
   today: string,
   localHour: number,
 ): boolean {
-  return r.status === "approved" && m.status === "held" && sendDay(m.date, r.kind) <= today && m.date >= today && localHour >= REMINDER_HOUR;
+  if (r.status !== "approved" || m.status !== "held" || localHour < REMINDER_HOUR) return false;
+  const day = sendDay(m.date, r.kind);
+  if (day > today || m.date < today) return false;
+  return day === today || m.date >= addDays(today, LATE_MIN_DAYS);
+}
+
+/**
+ * What to tell an admin about when a reminder would go, if it isn't simply on
+ * its day: late (it goes at the next 9 am run) or too late (it won't send).
+ */
+export function reminderTiming(
+  kind: ReminderKind,
+  m: { date: string; status: string },
+  today: string,
+  localHour: number,
+): { note: string; tooLate: boolean } | null {
+  const day = sendDay(m.date, kind);
+  const next = localHour < REMINDER_HOUR ? today : addDays(today, 1);
+  if (day >= next) return null;
+  if (isDue({ kind, status: "approved" }, m, next, REMINDER_HOUR)) {
+    return { note: `Its day has passed, so it goes at the next 9 am run, ${next === today ? "today" : "tomorrow"}.`, tooLate: false };
+  }
+  if (m.status !== "held") return { note: "The meeting isn't on, so it won't send.", tooLate: true };
+  return {
+    note:
+      kind === "week_before"
+        ? "Too late to send: the meeting is less than two days away. The day-of reminder covers it."
+        : "Too late to send: the 9 am run on the meeting day has passed.",
+    tooLate: true,
+  };
 }
 
 export type ReminderMeeting = {
