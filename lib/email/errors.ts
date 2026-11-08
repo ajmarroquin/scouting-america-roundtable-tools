@@ -12,6 +12,9 @@ export function emailFailureReason(error: unknown): string {
   }
   if (/RESEND_API_KEY/.test(raw)) return "the Resend API key isn't set on this deployment";
   if (/EMAIL_FROM|RESEND_EMAIL_DOMAIN/.test(raw)) return "no sender address is set (EMAIL_FROM)";
+  if (/plan includes \d+ segments|segment.*limit/i.test(raw)) {
+    return "Resend's plan allows only a few segments at a time and they're all in use. Delete segments you don't need in Resend, or wait 15 minutes and try again";
+  }
   if (/rate.?limit|too many requests|daily.*quota|quota/i.test(raw)) {
     return "Resend's sending limit was hit, so try again later";
   }

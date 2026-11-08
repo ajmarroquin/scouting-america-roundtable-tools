@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { draftWarnings } from "@/lib/announcements/editor";
-import { isDue, reminderDraft, sendDay } from "./rules";
+import { isDue, reminderDraft, reminderTiming, sendDay } from "./rules";
 
 const meeting = { id: "8f4c0b8e-7a43-4d64-9c3e-2b1e7f1d9a10", date: "2026-11-19", startTime: "19:00:00", format: "hybrid", place: "St. Mark's Hall", title: "Recharter", joinUrl: "https://example.org/zoom", link: "https://example.org/m/abc" };
 
@@ -20,9 +20,28 @@ describe("reminders", () => {
     expect(isDue({ ...approved, status: "draft" }, held, "2026-11-12", 9)).toBe(false);
     expect(isDue({ ...approved, status: "sent" }, held, "2026-11-12", 9)).toBe(false);
     expect(isDue(approved, { ...held, status: "cancelled" }, "2026-11-12", 9)).toBe(false);
-    // Approved late: it goes at the next run, but never after the meeting.
+    // Approved late: it goes at the next run while the meeting is two or more days off.
     expect(isDue(approved, held, "2026-11-16", 9)).toBe(true);
+    expect(isDue(approved, held, "2026-11-17", 9)).toBe(true);
+    expect(isDue(approved, held, "2026-11-18", 9)).toBe(false);
+    expect(isDue(approved, held, "2026-11-19", 9)).toBe(false);
     expect(isDue(approved, held, "2026-11-20", 9)).toBe(false);
+    // The day-of goes on the day only.
+    const dayOf = { kind: "day_of" as const, status: "approved" };
+    expect(isDue(dayOf, held, "2026-11-19", 9)).toBe(true);
+    expect(isDue(dayOf, held, "2026-11-18", 9)).toBe(false);
+  });
+
+  it("warn when a reminder is late or too late to send", () => {
+    const held = { date: "2026-11-19", status: "held" };
+    expect(reminderTiming("week_before", held, "2026-11-10", 15)).toBeNull();
+    // On its day before 9 am, it's on time; after 9 am, the next run is tomorrow.
+    expect(reminderTiming("week_before", held, "2026-11-12", 8)).toBeNull();
+    expect(reminderTiming("week_before", held, "2026-11-12", 10)).toEqual({ note: expect.stringContaining("tomorrow"), tooLate: false });
+    expect(reminderTiming("week_before", held, "2026-11-16", 7)).toEqual({ note: expect.stringContaining("today"), tooLate: false });
+    expect(reminderTiming("week_before", held, "2026-11-17", 10)).toEqual({ note: expect.stringContaining("less than two days"), tooLate: true });
+    expect(reminderTiming("day_of", held, "2026-11-19", 8)).toBeNull();
+    expect(reminderTiming("day_of", held, "2026-11-19", 13)).toEqual({ note: expect.stringContaining("meeting day has passed"), tooLate: true });
   });
 
   it("start from drafts filled in from the meeting, with nothing left to fill", () => {

@@ -12,7 +12,7 @@ import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { senderAddress } from "@/lib/email/sender";
 import { KIND_LABELS } from "@/lib/reminders/rules";
-import { getReminder } from "@/lib/reminders/service";
+import { getReminder, timingFor } from "@/lib/reminders/service";
 import { Compose } from "../../compose";
 import { CronWarning } from "../cron-warning";
 
@@ -62,6 +62,7 @@ async function ReminderView({ params }: { params: PageProps<"/announcements/remi
           status: r.status,
           approvedByName: r.approvedByName,
           error: r.error,
+          timing: timingFor(r),
         }}
       />
     </>

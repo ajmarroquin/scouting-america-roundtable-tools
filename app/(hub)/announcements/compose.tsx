@@ -67,6 +67,8 @@ export type ReminderInfo = {
   status: "draft" | "approved" | "sent" | "failed";
   approvedByName: string | null;
   error: string | null;
+  /** Set when it isn't simply going on its day: late (next 9 am run) or too late to send. */
+  timing?: { note: string; tooLate: boolean } | null;
 };
 import { WhoIsIn } from "./who-is-in";
 
@@ -561,6 +563,11 @@ function ReminderControls({
         {reminder.status === "failed" && <span className="text-destructive">Didn&apos;t send: {reminder.error}</span>}
         {sent && "Sent."}
       </p>
+      {!sent && reminder.timing && (
+        <p className={reminder.timing.tooLate ? "text-sm text-destructive" : "text-sm text-amber-700 dark:text-amber-400"} role="alert">
+          {reminder.timing.note}
+        </p>
+      )}
       {!sent && (
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" disabled={pending || !ready} onClick={onTest}>
@@ -574,7 +581,10 @@ function ReminderControls({
               Undo approval
             </Button>
           ) : (
-            <Button disabled={pending || !ready || unfinished} onClick={() => run(() => approveReminderAction(reminder.id, draft))}>
+            <Button
+              disabled={pending || !ready || unfinished || !!reminder.timing?.tooLate}
+              onClick={() => run(() => approveReminderAction(reminder.id, draft))}
+            >
               Approve to send {reminder.sendLabel}
             </Button>
           )}

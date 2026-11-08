@@ -25,6 +25,12 @@ describe("emailFailureReason", () => {
     );
   });
 
+  it("explains Resend's segment cap", () => {
+    expect(emailFailureReason(new Error("Resend: validation_error: Your plan includes 3 segments. Upgrade to add more."))).toMatch(
+      /segments at a time/,
+    );
+  });
+
   it("passes anything else through, trimmed", () => {
     expect(emailFailureReason(new Error("Resend: application_error: Something broke"))).toBe(
       'Resend said "application_error: Something broke"',

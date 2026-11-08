@@ -1,10 +1,10 @@
 import "server-only";
-import { count, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { count, desc, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "@/lib/audit";
 import type { CurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { announcement, contact, setting } from "@/lib/db/schema";
+import { announcement, contact } from "@/lib/db/schema";
 import { emailFailureReason } from "@/lib/email/errors";
 import { senderAddress } from "@/lib/email/sender";
 import { audienceInfo, audienceMembers, isAudienceKey } from "./audiences";
@@ -13,7 +13,11 @@ import { brandFrom } from "./brand";
 import { getBrand } from "./brand-store";
 import { renderAnnouncement } from "./render";
 
-const SEGMENTS_SETTING = "announcements.segments";
+// Every segment this app makes starts with this. Resend's plan caps how many
+// segments exist, so each send makes a fresh one and clears its own old ones,
+// once they're old enough that their broadcast has surely gone out.
+const SEGMENT_PREFIX = "Roundtable Tools: ";
+const SEGMENT_KEEP_MS = 15 * 60 * 1000;
 
 const draftSchema = z.object({
   audience: z.string().refine(isAudienceKey, "Pick who it goes to."),
@@ -75,8 +79,8 @@ export async function sendTestAnnouncement(actor: CurrentUser, raw: Omit<Announc
 }
 
 /**
- * Sends an announcement: picks up new unsubscribes, makes the audience's Resend
- * segment match who's in it now, and sends a broadcast to that segment.
+ * Sends an announcement: picks up new unsubscribes, puts who's in the audience
+ * now in a fresh Resend segment, and sends a broadcast to that segment.
  */
 export async function sendAnnouncement(actor: CurrentUser, raw: AnnouncementDraft, mailer: BroadcastMailer = getMailer()): Promise<Result> {
   const parsed = draftSchema.safeParse(raw);
@@ -112,13 +116,8 @@ export async function sendAnnouncement(actor: CurrentUser, raw: AnnouncementDraf
     recipients = members.length;
     if (!recipients) return { ok: false, message: `Nobody in "${audience.label}" has an email to send to.` };
 
-    const [saved] = await db.select({ value: setting.value }).from(setting).where(eq(setting.key, SEGMENTS_SETTING));
-    const segments = (saved?.value as Record<string, string> | undefined) ?? {};
-    const segmentId = await mailer.syncSegment(`Roundtable Tools: ${audience.label}`, segments[key] ?? null, members);
-    if (segments[key] !== segmentId) {
-      const value = { ...segments, [key]: segmentId };
-      await db.insert(setting).values({ key: SEGMENTS_SETTING, value }).onConflictDoUpdate({ target: setting.key, set: { value } });
-    }
+    await mailer.clearSegments(SEGMENT_PREFIX, new Date(Date.now() - SEGMENT_KEEP_MS));
+    const segmentId = await mailer.createSegment(`${SEGMENT_PREFIX}${audience.label}`.slice(0, 200), members);
 
     const brand = await getBrand();
     const { html, text } = renderAnnouncement({ body, brand, previewText: parsed.data.previewText, footerFrom: footerFrom(actor) });
