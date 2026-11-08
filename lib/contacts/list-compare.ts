@@ -5,7 +5,7 @@ import type { CurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { contact } from "@/lib/db/schema";
 import { addToGroup, createGroup } from "@/lib/groups/store";
-import type { CompareCandidate } from "./compare";
+import { type CompareCandidate, phoneList } from "./compare";
 import { contactName } from "./format";
 import { createContact } from "./mutations";
 
@@ -24,11 +24,13 @@ export async function compareData(): Promise<ComparePerson[]> {
 const addInput = z.object({
   add: z
     .array(
+      // Roomy on purpose: a cell that's too long is that one person's problem,
+      // reported back by name, never a reason to refuse the whole list.
       z.object({
-        firstName: z.string().trim().min(1).max(80),
-        lastName: z.string().trim().max(80),
-        email: z.string().trim().max(254),
-        phone: z.string().trim().max(40),
+        firstName: z.string().trim().min(1).max(500),
+        lastName: z.string().trim().max(500),
+        email: z.string().trim().max(500),
+        phone: z.string().trim().max(500),
       }),
     )
     .max(500, "Add up to 500 at a time."),
@@ -64,7 +66,9 @@ export async function addFromList(actor: CurrentUser, raw: unknown): Promise<Add
   for (const p of add) {
     // An email that doesn't look like one is left off rather than losing the person.
     const email = z.email().safeParse(p.email).success ? p.email : "";
-    const result = await createContact(actor, { ...p, email, isYouth: false, guardianEmail: "", affiliations: [], source: "manual" });
+    // A cell with several numbers ("home, Mobile") keeps one: the mobile, or else the first.
+    const phone = (phoneList(p.phone)[0] ?? "").slice(0, 40);
+    const result = await createContact(actor, { ...p, email, phone, isYouth: false, guardianEmail: "", affiliations: [], source: "manual" });
     if (result.ok && result.id) added.push(result.id);
     else if (result.id) already.push(result.id);
     else failed.push(`${contactName(p)}: ${result.message}`);

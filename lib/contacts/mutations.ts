@@ -11,7 +11,7 @@ import { contactName } from "./format";
 
 export type Result = { ok: boolean; message: string; id?: string };
 
-const name = z.string().trim().min(1, "Required").max(80);
+const name = z.string().trim().min(1, "Enter a first name.").max(80);
 const optionalText = (max: number) =>
   z
     .string()
@@ -46,8 +46,23 @@ const newContactSchema = z
 
 export type NewContactInput = z.input<typeof newContactSchema>;
 
+const FIELD_LABELS: Record<string, string> = {
+  firstName: "First name",
+  lastName: "Last name",
+  preferredName: "Preferred name",
+  email: "Email",
+  phone: "Phone",
+  guardianEmail: "Parent or guardian email",
+  notes: "Notes",
+};
+
+/** The first problem, naming the field ("Phone is too long: keep it to 40 characters."). */
 function firstIssue(error: z.ZodError): string {
-  return error.issues[0]?.message ?? "Check the form and try again.";
+  const issue = error.issues[0];
+  if (!issue) return "Check the form and try again.";
+  const field = FIELD_LABELS[String(issue.path[0])];
+  if (issue.code === "too_big" && field) return `${field} is too long: keep it to ${issue.maximum} characters.`;
+  return issue.message;
 }
 
 type ParsedAffiliation = z.output<typeof affiliationInputSchema>;

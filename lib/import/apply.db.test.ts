@@ -1036,17 +1036,25 @@ describe.skipIf(!local)("import against Postgres", () => {
     const result = await lists.addFromList(actor, {
       add: [
         { firstName: "Quincy", lastName: "Newperson", email: "quincy@example.com", phone: "212 555 0199" },
-        { firstName: "Rory", lastName: "Bademail", email: "not-an-email", phone: "" },
+        { firstName: "Rory", lastName: "Bademail", email: "not-an-email", phone: "(212) 555-0142 home, (212) 555-0187 Mobile" },
         { firstName: "Pat", lastName: "Testcase", email: pat.email ?? "", phone: "" },
+        { firstName: "X".repeat(90), lastName: "Toolong", email: "", phone: "" },
       ],
       existingIds: [pat.id],
       groupName: "DC list",
     });
-    expect(result).toMatchObject({ ok: true, message: 'Added 2 contacts, 1 was already in contacts, put 3 in "DC list".', failed: [] });
+    // One bad row is reported by name, and the rest still go in.
+    expect(result).toMatchObject({
+      ok: true,
+      message: 'Added 2 contacts, 1 was already in contacts, put 3 in "DC list".',
+      failed: [expect.stringContaining("First name is too long: keep it to 80 characters.")],
+    });
     const [quincy] = await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Quincy"));
     expect(quincy).toMatchObject({ lastName: "Newperson", email: "quincy@example.com", phone: "(212) 555-0199", isYouth: false, source: "manual" });
     const [rory] = await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Rory"));
     expect(rory.email).toBeNull();
+    // Two numbers in one cell: the mobile is kept.
+    expect(rory.phone).toBe("(212) 555-0187");
     expect((await groups.groupMemberIds(result.groupId!)).sort()).toEqual([pat.id, quincy.id, rory.id].sort());
   });
 });

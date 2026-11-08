@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type CompareCandidate, cellText, compareToContacts, phoneDigits, readList } from "./compare";
+import { type CompareCandidate, cellText, compareToContacts, phoneDigits, phoneList, readList } from "./compare";
 
 const contact = (over: Partial<CompareCandidate> & { id: string; firstName: string; lastName: string }): CompareCandidate => ({
   preferredName: null,
@@ -75,6 +75,18 @@ describe("compareToContacts", () => {
   it("matches on phone and name, whatever the formatting", () => {
     expect(phoneDigits("+1 (212) 555-0101")).toBe(phoneDigits("2125550101"));
     const r = compareToContacts(person("Alexander", "Example", "", "+1 212.555.0101"), people);
+    expect(r).toMatchObject({ status: "matched", candidates: [{ id: "alex" }] });
+  });
+
+  it("reads a cell with several phone numbers, mobile first", () => {
+    expect(phoneList("(212) 555-0142 home, (212) 555-0187 Mobile")).toEqual(["(212) 555-0187", "(212) 555-0142"]);
+    expect(phoneList("(212) 555-0133 Mobile")).toEqual(["(212) 555-0133"]);
+    expect(phoneList("212-555-0142(phone), 212-555-0187(mobile)")).toEqual(["212-555-0187", "212-555-0142"]);
+    expect(phoneList("212-555-0101 x204")).toEqual(["212-555-0101 x204"]);
+    expect(phoneDigits("212-555-0101 x204")).toBe("2125550101");
+    expect(phoneList("")).toEqual([]);
+    // Either number in the cell can match.
+    const r = compareToContacts(person("Alexander", "Example", "", "(212) 555-0187 Mobile, (212) 555-0101 home"), people);
     expect(r).toMatchObject({ status: "matched", candidates: [{ id: "alex" }] });
   });
 
