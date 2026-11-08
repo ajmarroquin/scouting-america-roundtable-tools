@@ -113,9 +113,22 @@ export type CompareCandidate = {
 
 /** The digits that identify a phone number: "+1 (212) 555-0101" and "2125550101" are the same. */
 export function phoneDigits(value: string | null | undefined): string {
-  let d = (value ?? "").replace(/\D/g, "");
+  let d = (value ?? "").replace(/\s*(ext\.?|x)\s*\d+\s*$/i, "").replace(/\D/g, "");
   if (d.length === 11 && d.startsWith("1")) d = d.slice(1);
   return d.length >= 7 ? d : "";
+}
+
+/**
+ * Each number in a phone cell, mobile first, without its label:
+ * "(212) 555-0142 home, (212) 555-0187 Mobile" is ["(212) 555-0187", "(212) 555-0142"].
+ */
+export function phoneList(value: string | null | undefined): string[] {
+  const parts = (value ?? "").split(/[,;\n]|\s+or\s+/i).map((s) => s.trim());
+  return parts
+    .filter((part) => phoneDigits(part))
+    .map((part, i) => ({ part, i, mobile: /mobile|cell/i.test(part) }))
+    .sort((a, b) => Number(b.mobile) - Number(a.mobile) || a.i - b.i)
+    .map(({ part }) => part.replace(/[\s(]*\b(mobile|cell|phone|tel|home|work|office|business|fax)\b\)?\.?\s*$/i, "").trim());
 }
 
 const SUFFIX = /[\s,]+(jr|sr|ii|iii|iv|v)\.?$/i;
@@ -123,7 +136,7 @@ const SUFFIX = /[\s,]+(jr|sr|ii|iii|iv|v)\.?$/i;
 /** One person on the list against every contact: matched, worth a look, or not in contacts. */
 export function compareToContacts(p: ListPerson, people: CompareCandidate[]): MatchResult {
   const email = p.email.trim().toLowerCase();
-  const phone = phoneDigits(p.phone);
+  const phones = phoneList(p.phone).map(phoneDigits);
   const name = `${p.firstName} ${p.lastName.replace(SUFFIX, "")}`.trim();
   const byName = name
     ? matchPerson(
@@ -137,7 +150,7 @@ export function compareToContacts(p: ListPerson, people: CompareCandidate[]): Ma
   for (const c of people) {
     const emails = [c.email, c.altEmail].filter((e): e is string => !!e).map((e) => e.toLowerCase());
     const sameEmail = !!email && emails.includes(email);
-    const samePhone = !!phone && phoneDigits(c.phone) === phone;
+    const samePhone = !!c.phone && phones.includes(phoneDigits(c.phone));
     const n = named.get(c.id);
     if (!sameEmail && !samePhone && !n) continue;
     const nameScore = n?.score ?? 0;
@@ -153,7 +166,7 @@ export function compareToContacts(p: ListPerson, people: CompareCandidate[]): Ma
 
     const notes: string[] = [];
     if (email && !sameEmail) notes.push(emails.length ? "the email is different" : "the contact has no email");
-    if (phone && !samePhone) notes.push(c.phone ? "the phone is different" : "the contact has no phone");
+    if (phones.length && !samePhone) notes.push(c.phone ? "the phone is different" : "the contact has no phone");
     scored.push({ id: c.id, score, reason: [reason, ...notes].join("; "), confirmed: (sameEmail || samePhone) && nameOk });
   }
   // An email or phone that agrees with the name beats a name alone.
