@@ -122,6 +122,14 @@ export async function unapproveReminderAction(id: string): Promise<Result> {
   });
 }
 
+export async function sendReminderNowAction(id: string): Promise<Result> {
+  return asAdmin(async (actor) => {
+    const r = await reminders.sendReminderNow(actor, String(id));
+    refresh();
+    return r;
+  });
+}
+
 export async function deleteReminderAction(id: string): Promise<Result> {
   return asAdmin(async (actor) => {
     const r = await reminders.deleteReminder(actor, String(id));

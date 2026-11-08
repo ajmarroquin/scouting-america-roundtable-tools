@@ -145,6 +145,34 @@ export async function deleteReminder(actor: CurrentUser, id: string): Promise<Re
   return { ok: true, message: "Deleted the reminder." };
 }
 
+/**
+ * Sends a reminder that didn't go, right now, as the admin who asks, so
+ * replies come to them. Only a failed one, and only before its meeting.
+ * Claimed first, so a double click can't send it twice.
+ */
+export async function sendReminderNow(actor: CurrentUser, id: string, mailer?: BroadcastMailer): Promise<Result> {
+  const r = await getReminder(id);
+  if (!r) return { ok: false, message: "That reminder no longer exists." };
+  if (r.status !== "failed") return { ok: false, message: r.status === "sent" ? "That reminder has already gone out." : "Only a reminder that didn't send can be sent now." };
+  if (r.meetingStatus !== "held" || r.meetingDate < appToday()) return { ok: false, message: "That meeting has passed, so there's nothing to remind people about." };
+  const checked = checkDraft(r);
+  if (!checked.ok) return checked;
+  if (!(await audienceInfo(r.audience))) return { ok: false, message: "Its audience no longer exists. Pick another and save." };
+  const claimed = await db
+    .update(reminder)
+    .set({ status: "sent", sentAt: new Date(), approvedBy: actor.id, approvedAt: new Date(), error: null })
+    .where(and(eq(reminder.id, id), eq(reminder.status, "failed")))
+    .returning({ id: reminder.id });
+  if (!claimed.length) return { ok: false, message: "That reminder is already being sent." };
+  const result = await sendAnnouncement(actor, { audience: r.audience, subject: r.subject, body: r.body, previewText: r.previewText ?? undefined }, mailer);
+  if (!result.ok) {
+    await db.update(reminder).set({ status: "failed", sentAt: null, error: result.message }).where(eq(reminder.id, id));
+    return result;
+  }
+  await writeAudit(actor, "reminder.send_now", { type: "reminder", id }, { meetingId: r.meetingId, kind: r.kind, audience: r.audience });
+  return result;
+}
+
 /** The hour of the day in the district's zone. */
 function localHour(now: Date): number {
   return Number(new Intl.DateTimeFormat("en-US", { timeZone: appTimeZone(), hour: "numeric", hourCycle: "h23" }).format(now));

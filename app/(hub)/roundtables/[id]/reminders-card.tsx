@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { deleteReminderAction, draftUsualRemindersAction } from "../../announcements/actions";
+import { deleteReminderAction, draftUsualRemindersAction, sendReminderNowAction } from "../../announcements/actions";
 
 type Item = {
   id: string;
@@ -17,6 +17,8 @@ type Item = {
   error: string | null;
   /** Late (goes at the next 9 am run) or too late to send. */
   timing: { note: string; tooLate: boolean } | null;
+  /** Who a reminder that didn't send would reach if sent now ("Said yes (2 people)"); null when it can't be. */
+  retryTo: string | null;
 };
 
 const STATUS: Record<Item["status"], string> = { draft: "Draft, not approved", approved: "Approved", sent: "Sent", failed: "Didn't send" };
@@ -24,6 +26,7 @@ const STATUS: Record<Item["status"], string> = { draft: "Draft, not approved", a
 /** A meeting's reminders: drafted ahead, approved by an admin, sent at 9 am on their day. */
 export function RemindersCard({ meetingId, items, canDraft }: { meetingId: string; items: Item[]; canDraft: boolean }) {
   const [pending, start] = useTransition();
+  const [confirming, setConfirming] = useState<string | null>(null);
   const run = (action: () => Promise<{ ok: boolean; message: string }>) =>
     start(async () => {
       const r = await action();
@@ -49,12 +52,35 @@ export function RemindersCard({ meetingId, items, canDraft }: { meetingId: strin
               </div>
               <div className="truncate text-muted-foreground">{r.subject}</div>
               {r.status === "failed" && r.error && <div className="text-xs text-destructive">{r.error}</div>}
-              {r.timing && (
+              {r.timing && !r.retryTo && (
                 <div className={r.timing.tooLate ? "text-xs text-destructive" : "text-xs text-amber-700 dark:text-amber-400"}>{r.timing.note}</div>
+              )}
+              {confirming === r.id && r.retryTo && (
+                <div className="mt-2 flex flex-wrap items-center gap-2" role="alert">
+                  <span>Send it now to {r.retryTo}? Replies come to you.</span>
+                  <Button
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => {
+                      setConfirming(null);
+                      run(() => sendReminderNowAction(r.id));
+                    }}
+                  >
+                    {pending ? "Sending…" : "Send it now"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>
+                    Cancel
+                  </Button>
+                </div>
               )}
             </div>
             <div className="flex gap-1">
-              <Button size="sm" variant={r.status === "draft" || r.status === "failed" ? "default" : "outline"} asChild>
+              {r.retryTo && confirming !== r.id && (
+                <Button size="sm" disabled={pending} onClick={() => setConfirming(r.id)}>
+                  Send now
+                </Button>
+              )}
+              <Button size="sm" variant={r.status === "draft" || (r.status === "failed" && !r.retryTo) ? "default" : "outline"} asChild>
                 <Link href={`/announcements/reminders/${r.id}`}>{r.status === "draft" || r.status === "failed" ? "Review and approve" : "Open"}</Link>
               </Button>
               {r.status !== "sent" && (
