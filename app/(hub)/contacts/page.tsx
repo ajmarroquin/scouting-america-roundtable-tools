@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { AUDIENCES, groupKey, membershipMap } from "@/lib/announcements/audiences";
-import { listContacts, listUnits } from "@/lib/contacts/queries";
+import { listContacts, listUnits, positionsInUse } from "@/lib/contacts/queries";
 import { listGroups } from "@/lib/groups/store";
 import { ContactsTable } from "./contacts-table";
 import { ContactsTabs } from "./contacts-tabs";
@@ -26,12 +26,14 @@ export default function ContactsPage({ searchParams }: PageProps<"/contacts">) {
 
 async function ContactsData({ searchParams }: { searchParams: PageProps<"/contacts">["searchParams"] }) {
   const user = await requireUser();
-  const [{ group }, contacts, units, memberships, groups] = await Promise.all([
+  const canEdit = hasRole(user.role, "editor");
+  const [{ group, add }, contacts, units, memberships, groups, fromRoster] = await Promise.all([
     searchParams,
     listContacts(),
     listUnits(),
     membershipMap(),
     listGroups(),
+    canEdit ? positionsInUse() : Promise.resolve([]),
   ]);
   const groupOptions = [
     // "Everyone" is the whole list, so it isn't a filter.
@@ -45,7 +47,9 @@ async function ContactsData({ searchParams }: { searchParams: PageProps<"/contac
       memberships={memberships}
       groupOptions={groupOptions}
       initialGroup={typeof group === "string" && groupOptions.some((o) => o.value === group) ? group : undefined}
-      canEdit={hasRole(user.role, "editor")}
+      fromRoster={fromRoster}
+      startAdding={canEdit && add === "1"}
+      canEdit={canEdit}
       canImport={hasRole(user.role, "admin")}
     />
   );

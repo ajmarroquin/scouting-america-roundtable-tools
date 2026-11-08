@@ -1,21 +1,14 @@
 "use client";
 
-import { DownloadIcon, EllipsisVerticalIcon, FileUpIcon, PlusIcon, UserCheckIcon } from "lucide-react";
+import { DownloadIcon, FileUpIcon, UserCheckIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { AddButton, AddPanel, MoreMenu, Toolbar, ToolbarActions, ToolbarSearch, ToolbarSummary } from "@/components/list-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -59,7 +52,12 @@ export function MeetingsView({
     [meetings, currentYear],
   );
   const [year, setYear] = useState(currentYear);
-  const shown = meetings.filter((m) => scoutingYearOf(m.date) === year);
+  const [query, setQuery] = useState("");
+  const inYear = meetings.filter((m) => scoutingYearOf(m.date) === year);
+  const q = query.trim().toLowerCase();
+  const shown = inYear.filter(
+    (m) => !q || `${meetingDateLabel(m.date)} ${m.title ?? ""} ${m.place ?? ""} ${FORMAT_LABELS[m.format] ?? ""}`.toLowerCase().includes(q),
+  );
   const todays = meetings.find((m) => m.date === today && m.status === "held");
   const [values, setValues] = useState<MeetingValues>(() => {
     const times = suggestedTimes(meetings);
@@ -78,9 +76,10 @@ export function MeetingsView({
       notes: "",
     };
   });
-  const held = shown.filter((m) => m.status === "held" && !isUpcoming(m.date, today)).length;
-  const upcoming = shown.filter((m) => m.status === "held" && isUpcoming(m.date, today)).length;
-  const cancelled = shown.filter((m) => m.status === "cancelled").length;
+  // Counts are for the whole year, whatever the search shows.
+  const held = inYear.filter((m) => m.status === "held" && !isUpcoming(m.date, today)).length;
+  const upcoming = inYear.filter((m) => m.status === "held" && isUpcoming(m.date, today)).length;
+  const cancelled = inYear.filter((m) => m.status === "cancelled").length;
   const [pending, start] = useTransition();
   const [adding, setAdding] = useState(false);
 
@@ -109,7 +108,75 @@ export function MeetingsView({
         </Button>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <Toolbar>
+        <ToolbarSearch label="Search meetings" placeholder="Search topics, places, dates" value={query} onChange={setQuery} />
+        <ToolbarSummary>
+          {held} held{upcoming > 0 && `, ${upcoming} upcoming`}, {cancelled} cancelled
+          {q && ` · ${shown.length} of ${inYear.length} shown`}
+        </ToolbarSummary>
+        <ToolbarActions>
+          {canEdit && (
+            <AddButton open={adding} onOpenChange={setAdding} controls="new-meeting">
+              Add meeting
+            </AddButton>
+          )}
+          <MoreMenu label="More roundtable actions">
+            {canImport && (
+              <>
+                <DropdownMenuItem asChild>
+                  <Link href="/roundtables/import">
+                    <FileUpIcon /> Load an old sheet
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuLabel>Export {year}</DropdownMenuLabel>
+            <DropdownMenuItem disabled={inYear.length === 0} onSelect={() => void exportYear("xlsx")}>
+              <DownloadIcon /> Excel (both views)
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={inYear.length === 0} onSelect={() => void exportYear("matrix")}>
+              <DownloadIcon /> CSV, one row per person
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={inYear.length === 0} onSelect={() => void exportYear("long")}>
+              <DownloadIcon /> CSV, one row per check-in
+            </DropdownMenuItem>
+          </MoreMenu>
+        </ToolbarActions>
+      </Toolbar>
+
+      {canEdit && adding && (
+        <AddPanel id="new-meeting" title="New meeting">
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              start(async () => {
+                const result = await createMeetingAction(values);
+                if (result.ok && result.id) {
+                  toast.success(result.message);
+                  router.push(`/roundtables/${result.id}`);
+                } else {
+                  toast.error(result.message);
+                  if (result.id) router.push(`/roundtables/${result.id}`);
+                }
+              });
+            }}
+          >
+            <MeetingFields idPrefix="new" values={values} onChange={setValues} today={today} saved={savedDetails(meetings)} compact />
+            <div className="flex gap-2">
+              <Button type="submit" disabled={pending}>
+                {pending ? "Saving…" : "Save meeting"}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </AddPanel>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Select value={year} onValueChange={setYear}>
           <SelectTrigger aria-label="Scouting year" className="w-52">
             <SelectValue />
@@ -122,83 +189,10 @@ export function MeetingsView({
             ))}
           </SelectContent>
         </Select>
-        <p className="mr-auto text-sm text-muted-foreground" role="status">
-          {held} held{upcoming > 0 && `, ${upcoming} upcoming`}, {cancelled} cancelled
-        </p>
-        {canEdit && (
-          <Button size="sm" variant={adding ? "secondary" : "default"} aria-expanded={adding} aria-controls="new-meeting" onClick={() => setAdding(!adding)}>
-            <PlusIcon /> Add meeting
-          </Button>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon-sm" aria-label="More roundtable actions">
-              <EllipsisVerticalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-60">
-            {canImport && (
-              <>
-                <DropdownMenuItem asChild>
-                  <Link href="/roundtables/import">
-                    <FileUpIcon /> Load an old sheet
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            <DropdownMenuLabel>Export {year}</DropdownMenuLabel>
-            <DropdownMenuItem disabled={shown.length === 0} onSelect={() => void exportYear("xlsx")}>
-              <DownloadIcon /> Excel (both views)
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={shown.length === 0} onSelect={() => void exportYear("matrix")}>
-              <DownloadIcon /> CSV, one row per person
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={shown.length === 0} onSelect={() => void exportYear("long")}>
-              <DownloadIcon /> CSV, one row per check-in
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
-      {canEdit && adding && (
-        <Card id="new-meeting">
-          <CardHeader>
-            <CardTitle>New meeting</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="flex flex-col gap-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                start(async () => {
-                  const result = await createMeetingAction(values);
-                  if (result.ok && result.id) {
-                    toast.success(result.message);
-                    router.push(`/roundtables/${result.id}`);
-                  } else {
-                    toast.error(result.message);
-                    if (result.id) router.push(`/roundtables/${result.id}`);
-                  }
-                });
-              }}
-            >
-              <MeetingFields idPrefix="new" values={values} onChange={setValues} today={today} saved={savedDetails(meetings)} compact />
-              <div className="flex gap-2">
-                <Button type="submit" disabled={pending}>
-                  {pending ? "Saving…" : "Save meeting"}
-                </Button>
-                <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
       {shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No meetings in {year} yet.</p>
+        <p className="text-sm text-muted-foreground">{inYear.length ? "No meetings match." : `No meetings in ${year} yet.`}</p>
       ) : (
         <Table>
           <TableHeader>

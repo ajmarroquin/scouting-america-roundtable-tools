@@ -1,12 +1,14 @@
 "use client";
 
-import { FileUpIcon, SearchIcon, TriangleAlertIcon } from "lucide-react";
+import { FileUpIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { AddButton, AddPanel, MoreMenu, Toolbar, ToolbarActions, ToolbarSearch, ToolbarSummary } from "@/components/list-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -63,6 +65,7 @@ export function UnitsView({
 }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState(ALL);
+  const [adding, setAdding] = useState(false);
   const offList = units.filter((u) => u.onList === false);
   const [onlyOff, setOnlyOff] = useState(false);
   const counted = units.filter((u) => u.counted).length;
@@ -77,52 +80,36 @@ export function UnitsView({
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm" role="status">
-            {info ? (
-              <>
-                <span className="font-medium">{counted} units</span> count toward coverage, from the unit list as of{" "}
-                {meetingDateLabel(info.asOf, "short")}.
-              </>
-            ) : (
-              <>
-                No unit list loaded yet, so coverage counts the <span className="font-medium">{counted} active units</span> from the
-                roster.
-              </>
-            )}
-          </p>
-          {canLoad && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/units/load">
-                <FileUpIcon /> {info ? "Load a newer unit list" : "Load the unit list"}
-              </Link>
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-
-      {offList.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setOnlyOff((v) => !v)}
-          className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-left text-sm"
-          aria-pressed={onlyOff}
-        >
-          <TriangleAlertIcon className="size-4 shrink-0 text-destructive" />
-          <span>
-            {offList.length} {offList.length === 1 ? "unit isn't" : "units aren't"} on the council&apos;s unit list:{" "}
-            {offList.map((u) => u.label).join(", ")}. Usually a walk-in&apos;s unit typed by hand, or a unit that folded.{" "}
-            <span className="font-medium underline">{onlyOff ? "Show all units" : "Show only these"}</span>
+      <Toolbar>
+        <ToolbarSearch label="Search units" placeholder="Search units, sub-districts, charters" value={query} onChange={setQuery} />
+        <ToolbarSummary>
+          <span title={info ? `From the unit list as of ${meetingDateLabel(info.asOf, "short")}` : "No unit list yet, so the active units in the roster"}>
+            {counted} count toward coverage
           </span>
-        </button>
-      )}
+          {offList.length > 0 && `, ${offList.length} not on the unit list`}
+          {shown.length !== units.length && ` · ${shown.length} of ${units.length} shown`}
+        </ToolbarSummary>
+        <ToolbarActions>
+          {canEdit && (
+            <AddButton open={adding} onOpenChange={setAdding} controls="new-unit">
+              Add unit
+            </AddButton>
+          )}
+          {canLoad && (
+            <MoreMenu label="More unit actions">
+              <DropdownMenuItem asChild>
+                <Link href="/units/load">
+                  <FileUpIcon /> {info ? "Load a newer unit list" : "Load the unit list"}
+                </Link>
+              </DropdownMenuItem>
+            </MoreMenu>
+          )}
+        </ToolbarActions>
+      </Toolbar>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-48 flex-1">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-8" placeholder="Search units" aria-label="Search units" value={query} onChange={(e) => setQuery(e.target.value)} />
-        </div>
+      {canEdit && adding && <AddUnit onDone={() => setAdding(false)} />}
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Select value={type} onValueChange={setType}>
           <SelectTrigger className="w-32" aria-label="Unit type">
             <SelectValue />
@@ -137,7 +124,33 @@ export function UnitsView({
           </SelectContent>
         </Select>
         <YearSelect years={years} value={year} />
+        {offList.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Checkbox id="only-off-list" checked={onlyOff} onCheckedChange={(v) => setOnlyOff(v === true)} />
+            <Label htmlFor="only-off-list" className="font-normal">
+              Only units not on the unit list ({offList.length})
+            </Label>
+          </div>
+        )}
       </div>
+      {onlyOff && (
+        <p className="text-sm text-muted-foreground">
+          Not on the council&apos;s unit list: usually a walk-in&apos;s unit typed by hand, or a unit that folded.
+        </p>
+      )}
+      {!info && (
+        <p className="text-sm text-muted-foreground">
+          No unit list loaded yet, so coverage counts the active units from the roster.
+          {canLoad && (
+            <>
+              {" "}
+              <Link href="/units/load" className="underline underline-offset-4">
+                Load the unit list
+              </Link>
+            </>
+          )}
+        </p>
+      )}
 
       <Table>
         <TableHeader>
@@ -183,12 +196,11 @@ export function UnitsView({
         </TableBody>
       </Table>
 
-      {canEdit && <AddUnit />}
     </div>
   );
 }
 
-function AddUnit() {
+function AddUnit({ onDone }: { onDone: () => void }) {
   const [type, setType] = useState<string>("Pack");
   const [number, setNumber] = useState("");
   const [designation, setDesignation] = useState<string>("");
@@ -196,87 +208,86 @@ function AddUnit() {
   const options = DESIGNATIONS[type];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Add a unit</CardTitle>
-        <CardDescription>
-          For a unit that isn&apos;t in the app yet. It shows as &ldquo;Not on the unit list&rdquo; until a unit list or roster includes
-          it.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          className="flex flex-wrap items-end gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            start(async () => {
-              const result = await addUnitAction({
-                type,
-                number,
-                genderAccepted: options ? ((designation || null) as "B" | "G" | "F" | null) : null,
-              });
-              if (result.ok) {
-                toast.success(result.message);
-                setNumber("");
-                setDesignation("");
-              } else toast.error(result.message);
+    <AddPanel
+      id="new-unit"
+      title="New unit"
+      description="For a unit that isn't in the app yet. It shows as “Not on the unit list” until a unit list or roster includes it."
+    >
+      <form
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          start(async () => {
+            const result = await addUnitAction({
+              type,
+              number,
+              genderAccepted: options ? ((designation || null) as "B" | "G" | "F" | null) : null,
             });
-          }}
-        >
+            if (result.ok) {
+              toast.success(result.message);
+              onDone();
+            } else toast.error(result.message);
+          });
+        }}
+      >
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="unit-type">Type</Label>
+          <Select
+            value={type}
+            onValueChange={(v) => {
+              setType(v);
+              setDesignation("");
+            }}
+          >
+            <SelectTrigger id="unit-type" className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {NEW_UNIT_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="unit-number">Number</Label>
+          <Input
+            id="unit-number"
+            className="w-28"
+            inputMode="numeric"
+            required
+            value={number}
+            onChange={(e) => setNumber(e.target.value.replace(/\D/g, ""))}
+          />
+        </div>
+        {options && (
           <div className="flex flex-col gap-2">
-            <Label htmlFor="unit-type">Type</Label>
-            <Select
-              value={type}
-              onValueChange={(v) => {
-                setType(v);
-                setDesignation("");
-              }}
-            >
-              <SelectTrigger id="unit-type" className="w-32">
-                <SelectValue />
+            <Label htmlFor="unit-designation">Designation</Label>
+            <Select value={designation} onValueChange={setDesignation}>
+              <SelectTrigger id="unit-designation" className="w-36">
+                <SelectValue placeholder="Pick one" />
               </SelectTrigger>
               <SelectContent>
-                {NEW_UNIT_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
+                {options.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="unit-number">Number</Label>
-            <Input
-              id="unit-number"
-              className="w-28"
-              inputMode="numeric"
-              required
-              value={number}
-              onChange={(e) => setNumber(e.target.value.replace(/\D/g, ""))}
-            />
-          </div>
-          {options && (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="unit-designation">Designation</Label>
-              <Select value={designation} onValueChange={setDesignation}>
-                <SelectTrigger id="unit-designation" className="w-36">
-                  <SelectValue placeholder="Pick one" />
-                </SelectTrigger>
-                <SelectContent>
-                  {options.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+        )}
+        <div className="flex gap-2">
           <Button type="submit" disabled={pending || !number}>
-            {pending ? "Adding…" : "Add unit"}
+            {pending ? "Saving…" : "Save unit"}
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+          <Button type="button" variant="ghost" onClick={onDone}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </AddPanel>
   );
 }

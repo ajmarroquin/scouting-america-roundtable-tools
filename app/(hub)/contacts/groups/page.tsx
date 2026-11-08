@@ -18,8 +18,8 @@ export default function GroupsPage() {
         <h1 className="text-2xl font-semibold">Contacts</h1>
         <ContactsTabs active="groups" />
         <p className="text-sm text-muted-foreground">
-          Built-in lists keep themselves up to date from the roster and attendance. Groups are lists you build by hand, like a small
-          test group or a committee. Send an announcement to either, or filter contacts by it.
+          Your groups are lists you build by hand, like a small test group or a committee. Built-in lists keep themselves up to date
+          from the roster and attendance. Send an announcement to either, or filter contacts by it.
         </p>
       </div>
       <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted" />}>
@@ -36,6 +36,12 @@ async function GroupsData() {
   for (const keys of Object.values(memberships)) for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
   return (
     <>
+      <section className="flex flex-col gap-3" aria-labelledby="your-groups">
+        <h2 id="your-groups" className="text-lg font-medium">
+          Your groups
+        </h2>
+        <GroupsManager groups={groups.map((g) => ({ ...g, updatedAt: g.updatedAt.toISOString() }))} canEdit={hasRole(user.role, "editor")} />
+      </section>
       <Card>
         <CardHeader>
           <CardTitle>Built-in lists</CardTitle>
@@ -63,8 +69,6 @@ async function GroupsData() {
           </dl>
         </CardContent>
       </Card>
-      <h2 className="text-lg font-medium">Your groups</h2>
-      <GroupsManager groups={groups.map((g) => ({ ...g, updatedAt: g.updatedAt.toISOString() }))} canEdit={hasRole(user.role, "editor")} />
     </>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { PlusIcon, UsersIcon } from "lucide-react";
+import { UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import { AddButton, AddPanel, Toolbar, ToolbarActions, ToolbarSearch, ToolbarSummary } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,13 +21,32 @@ import { createGroupAction, deleteGroupAction, updateGroupAction } from "./actio
 type Group = { id: string; name: string; description: string | null; count: number; createdByName: string | null; updatedAt: string };
 
 export function GroupsManager({ groups, canEdit }: { groups: Group[]; canEdit: boolean }) {
+  const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState(false);
+  const q = query.trim().toLowerCase();
+  const shown = groups.filter((g) => !q || `${g.name} ${g.description ?? ""}`.toLowerCase().includes(q));
   return (
     <div className="flex flex-col gap-4">
-      {canEdit && <NewGroup />}
+      <Toolbar>
+        <ToolbarSearch label="Search groups" placeholder="Search groups" value={query} onChange={setQuery} />
+        <ToolbarSummary>
+          {shown.length === groups.length ? `${groups.length} ${groups.length === 1 ? "group" : "groups"}` : `${shown.length} of ${groups.length} groups`}
+        </ToolbarSummary>
+        {canEdit && (
+          <ToolbarActions>
+            <AddButton open={adding} onOpenChange={setAdding} controls="new-group">
+              Add group
+            </AddButton>
+          </ToolbarActions>
+        )}
+      </Toolbar>
+      {canEdit && adding && <NewGroup onDone={() => setAdding(false)} />}
       {groups.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No groups yet.{canEdit && " Make one above, or pick people on the Contacts page and add them to a new group."}
+          No groups yet.{canEdit && " Add one, or pick people on the Contacts tab and add them to a new group."}
         </p>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No groups match.</p>
       ) : (
         <Table>
           <TableHeader>
@@ -39,7 +58,7 @@ export function GroupsManager({ groups, canEdit }: { groups: Group[]; canEdit: b
             </TableRow>
           </TableHeader>
           <TableBody>
-            {groups.map((g) => (
+            {shown.map((g) => (
               <GroupRow key={`${g.id}-${g.updatedAt}`} group={g} canEdit={canEdit} />
             ))}
           </TableBody>
@@ -49,51 +68,49 @@ export function GroupsManager({ groups, canEdit }: { groups: Group[]; canEdit: b
   );
 }
 
-function NewGroup() {
+function NewGroup({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [pending, start] = useTransition();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>New group</CardTitle>
-        <CardDescription>Then add people to it from the Contacts page, or from a person&apos;s own page.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          className="grid gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end"
-          onSubmit={(e) => {
-            e.preventDefault();
-            start(async () => {
-              const result = await createGroupAction({ name, description });
-              if (result.ok) {
-                toast.success(result.message);
-                setName("");
-                setDescription("");
-              } else toast.error(result.message);
-            });
-          }}
-        >
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="group-name">Name</Label>
-            <Input id="group-name" maxLength={60} placeholder="Test group" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="group-description">What it&apos;s for (optional)</Label>
-            <Input
-              id="group-description"
-              maxLength={200}
-              placeholder="A few of us, for trying an announcement first"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
+    <AddPanel id="new-group" title="New group" description="Then add people to it from the Contacts tab, or from a person's own page.">
+      <form
+        className="grid gap-3 sm:grid-cols-[1fr_2fr] sm:items-end"
+        onSubmit={(e) => {
+          e.preventDefault();
+          start(async () => {
+            const result = await createGroupAction({ name, description });
+            if (result.ok) {
+              toast.success(result.message);
+              onDone();
+            } else toast.error(result.message);
+          });
+        }}
+      >
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="group-name">Name</Label>
+          <Input id="group-name" maxLength={60} placeholder="Test group" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="group-description">What it&apos;s for (optional)</Label>
+          <Input
+            id="group-description"
+            maxLength={200}
+            placeholder="A few of us, for trying an announcement first"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-2 sm:col-span-2">
           <Button type="submit" disabled={pending || !name.trim()}>
-            <PlusIcon /> Make group
+            {pending ? "Saving…" : "Save group"}
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+          <Button type="button" variant="ghost" onClick={onDone}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </AddPanel>
   );
 }
 

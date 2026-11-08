@@ -1,21 +1,15 @@
 "use client";
 
-import { DownloadIcon, EllipsisVerticalIcon, PlusIcon, SearchIcon, SettingsIcon, UploadIcon } from "lucide-react";
+import { DownloadIcon, PlusIcon, SettingsIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { AddButton, AddPanel, MoreMenu, Toolbar, ToolbarActions, ToolbarSearch, ToolbarSummary } from "@/components/list-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox } from "@/components/ui/combobox";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -43,6 +37,7 @@ import type { ContactListItem, UnitOption } from "@/lib/contacts/queries";
 import { downloadCsv, downloadXlsx, stamp } from "@/lib/export/download";
 import { CopyEmails } from "./copy-emails";
 import { addToGroupAction, createGroupAction, removeFromGroupAction } from "./groups/actions";
+import { NewContactForm } from "./new-contact-form";
 
 const ALL = "all";
 const DISTRICT = "district";
@@ -122,6 +117,8 @@ export function ContactsTable({
   memberships,
   groupOptions,
   initialGroup,
+  fromRoster,
+  startAdding,
   canEdit,
   canImport,
 }: {
@@ -130,6 +127,8 @@ export function ContactsTable({
   memberships: Record<string, string[]>;
   groupOptions: GroupOption[];
   initialGroup?: string;
+  fromRoster: string[];
+  startAdding: boolean;
   canEdit: boolean;
   canImport: boolean;
 }) {
@@ -137,6 +136,7 @@ export function ContactsTable({
   const [filters, setFilterState] = useState<Filters>(initialGroup ? { ...DEFAULTS, group: [initialGroup], status: [] } : DEFAULTS);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [copyOptionsOpen, setCopyOptionsOpen] = useState(false);
+  const [adding, setAdding] = useState(startAdding);
   const openCopyOptions = useRef(false);
   // Picking people is for what's on screen, so a new filter starts a new pick.
   const setFilters = (next: Filters | ((f: Filters) => Filters)) => {
@@ -179,26 +179,37 @@ export function ContactsTable({
     [units, filters.program],
   );
 
+  const addPanel = canEdit && adding && (
+    <AddPanel
+      id="new-contact"
+      title="New contact"
+      description="For people who aren't in the roster export yet, like walk-ins or youth who need to hear from roundtable. If they show up in a later import with the same email and first name, the import links to this record."
+    >
+      <NewContactForm units={units.filter((u) => u.active)} fromRoster={fromRoster} onCancel={() => setAdding(false)} />
+    </AddPanel>
+  );
+
   if (contacts.length === 0) {
     return (
-      <div className="flex flex-col items-start gap-3 rounded-xl border p-6">
-        <p className="text-sm text-muted-foreground">No contacts yet.</p>
-        <div className="flex gap-2">
-          {canImport && (
-            <Button asChild>
-              <Link href="/contacts/import">
-                <UploadIcon /> Import the roster
-              </Link>
-            </Button>
-          )}
-          {canEdit && (
-            <Button variant="outline" asChild>
-              <Link href="/contacts/new">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col items-start gap-3 rounded-xl border p-6">
+          <p className="text-sm text-muted-foreground">No contacts yet.</p>
+          <div className="flex gap-2">
+            {canImport && (
+              <Button asChild>
+                <Link href="/contacts/import">
+                  <UploadIcon /> Import the roster
+                </Link>
+              </Button>
+            )}
+            {canEdit && (
+              <Button variant="outline" aria-expanded={adding} aria-controls="new-contact" onClick={() => setAdding(true)}>
                 <PlusIcon /> Add a contact
-              </Link>
-            </Button>
-          )}
+              </Button>
+            )}
+          </div>
         </div>
+        {addPanel}
       </div>
     );
   }
@@ -207,97 +218,26 @@ export function ContactsTable({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-2 sm:flex sm:flex-wrap">
-        <div className="relative sm:min-w-64 sm:flex-1">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Search name, email, unit, position"
-            aria-label="Search contacts"
-            value={filters.q}
-            onChange={(e) => set("q")(e.target.value)}
-          />
-        </div>
-        <Combobox
-          multiple
-          label="Program"
-          allLabel="All programs"
-          className="sm:w-40"
-          value={filters.program}
-          onChange={(v) => setFilters((f) => ({ ...f, program: v, unit: f.unit.filter((id) => !v.length || v.includes(units.find((u) => u.id === id)?.type ?? "")) }))}
-          options={programs}
-        />
-        <Combobox multiple label="Unit" allLabel="All units" className="sm:w-40" value={filters.unit} onChange={set("unit")} options={unitOptions} />
-        <Combobox multiple label="Position" allLabel="All positions" className="sm:w-44" value={filters.position} onChange={set("position")} options={positions} />
-        <Combobox
-          multiple
-          label="Group"
-          allLabel="Any group"
-          className="sm:w-48"
-          value={filters.group}
-          onChange={set("group")}
-          options={groupOptions.map((g) => ({ value: g.value, label: g.label, hint: g.description, group: g.custom ? "Your groups" : "Built-in lists" }))}
-        />
-        <FilterSelect
-          label="Email"
-          value={filters.email}
-          onChange={set("email")}
-          options={[
-            { value: ALL, label: "With or without email" },
-            { value: "with", label: "Has email" },
-            { value: "without", label: "No email" },
-          ]}
-        />
-        <Combobox
-          multiple
-          label="Status"
-          allLabel="Any status"
-          className="sm:w-44"
-          value={filters.status}
-          onChange={set("status")}
-          options={[
-            { value: "active", label: STATUS_LABELS.active },
-            { value: "not_in_roster", label: STATUS_LABELS.not_in_roster },
-            { value: "archived", label: STATUS_LABELS.archived },
-          ]}
-        />
-        {filtersActive && (
-          <Button variant="ghost" size="sm" className="self-center" onClick={() => setFilters(DEFAULTS)}>
-            Clear filters
-          </Button>
-        )}
-      </div>
-
-      {canEdit && selected.size > 0 && (
-        <GroupBar
-          picked={[...selected]}
-          groups={groupOptions.filter((g) => g.custom)}
-          filteredGroup={filters.group.length === 1 && groupNames.has(filters.group[0]) ? { key: filters.group[0], name: groupNames.get(filters.group[0])! } : null}
-          onDone={() => setSelected(new Set())}
-        />
-      )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="w-full text-sm text-muted-foreground sm:mr-auto sm:w-auto" role="status">
+      <Toolbar>
+        <ToolbarSearch label="Search contacts" placeholder="Search name, email, unit, position" value={filters.q} onChange={set("q")} />
+        <ToolbarSummary>
           {filtered.length} of {contacts.length} contacts
-        </p>
-        {canEdit && (
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/contacts/new">
-              <PlusIcon /> Add contact
-            </Link>
-          </Button>
-        )}
-        <CopyEmails contacts={filtered} optionsButton={false} optionsOpen={copyOptionsOpen} onOptionsOpenChange={setCopyOptionsOpen} />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon-sm" aria-label="More contact actions">
-              <EllipsisVerticalIcon />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-56"
+        </ToolbarSummary>
+        <ToolbarActions>
+          {canEdit && (
+            <AddButton open={adding} onOpenChange={setAdding} controls="new-contact">
+              Add contact
+            </AddButton>
+          )}
+          <CopyEmails
+            contacts={filtered}
+            variant="outline"
+            optionsButton={false}
+            optionsOpen={copyOptionsOpen}
+            onOptionsOpenChange={setCopyOptionsOpen}
+          />
+          <MoreMenu
+            label="More contact actions"
             onCloseAutoFocus={(e) => {
               // Open the copy options once the menu has fully closed, so its focus
               // going back to this button doesn't close the panel straight away.
@@ -348,9 +288,71 @@ export function ContactsTable({
             >
               <SettingsIcon /> Email copy options
             </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </MoreMenu>
+        </ToolbarActions>
+      </Toolbar>
+
+      {addPanel}
+
+      <div className="grid gap-2 sm:flex sm:flex-wrap">
+        <Combobox
+          multiple
+          label="Programs"
+          allLabel="All programs"
+          className="sm:w-40"
+          value={filters.program}
+          onChange={(v) => setFilters((f) => ({ ...f, program: v, unit: f.unit.filter((id) => !v.length || v.includes(units.find((u) => u.id === id)?.type ?? "")) }))}
+          options={programs}
+        />
+        <Combobox multiple label="Units" allLabel="All units" className="sm:w-40" value={filters.unit} onChange={set("unit")} options={unitOptions} />
+        <Combobox multiple label="Positions" allLabel="All positions" className="sm:w-44" value={filters.position} onChange={set("position")} options={positions} />
+        <Combobox
+          multiple
+          label="Groups"
+          allLabel="Any group"
+          className="sm:w-48"
+          value={filters.group}
+          onChange={set("group")}
+          options={groupOptions.map((g) => ({ value: g.value, label: g.label, hint: g.description, group: g.custom ? "Your groups" : "Built-in lists" }))}
+        />
+        <FilterSelect
+          label="Email on file"
+          value={filters.email}
+          onChange={set("email")}
+          options={[
+            { value: ALL, label: "With or without email" },
+            { value: "with", label: "Has email" },
+            { value: "without", label: "No email" },
+          ]}
+        />
+        <Combobox
+          multiple
+          label="Contact status"
+          allLabel="Any status"
+          className="sm:w-44"
+          value={filters.status}
+          onChange={set("status")}
+          options={[
+            { value: "active", label: STATUS_LABELS.active },
+            { value: "not_in_roster", label: STATUS_LABELS.not_in_roster },
+            { value: "archived", label: STATUS_LABELS.archived },
+          ]}
+        />
+        {filtersActive && (
+          <Button variant="ghost" size="sm" className="self-center" onClick={() => setFilters(DEFAULTS)}>
+            Clear filters
+          </Button>
+        )}
       </div>
+
+      {canEdit && selected.size > 0 && (
+        <GroupBar
+          picked={[...selected]}
+          groups={groupOptions.filter((g) => g.custom)}
+          filteredGroup={filters.group.length === 1 && groupNames.has(filters.group[0]) ? { key: filters.group[0], name: groupNames.get(filters.group[0])! } : null}
+          onDone={() => setSelected(new Set())}
+        />
+      )}
 
       <Table>
         <TableHeader>
