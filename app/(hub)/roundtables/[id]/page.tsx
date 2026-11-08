@@ -13,6 +13,7 @@ import { appTimeZone, appToday } from "@/lib/attendance/today";
 import { checkInWindow, clockIn } from "@/lib/selfcheckin/rules";
 import { KIND_LABELS } from "@/lib/reminders/rules";
 import { remindersFor, timingFor } from "@/lib/reminders/service";
+import { audienceInfo, audienceMembers } from "@/lib/announcements/audiences";
 import { openReviews, rsvpsFor } from "@/lib/selfcheckin/service";
 import { meetingDateLabel } from "@/lib/attendance/year";
 import { FORMAT_LABELS } from "@/lib/attendance/labels";
@@ -60,6 +61,15 @@ async function MeetingView({ params }: { params: PageProps<"/roundtables/[id]">[
   ]);
   const isAdmin = hasRole(user.role, "admin");
   const reminderItems = isAdmin && m.status === "held" ? await remindersFor(m.id) : [];
+  // A reminder that didn't send can go now, until the meeting's over: who it would reach.
+  const retryTo = new Map<string, string>();
+  for (const r of reminderItems) {
+    if (r.status !== "failed" || m.date < today) continue;
+    const info = await audienceInfo(r.audience);
+    if (!info) continue;
+    const n = (await audienceMembers(r.audience)).length;
+    if (n) retryTo.set(r.id, `${info.label} (${n} ${n === 1 ? "person" : "people"})`);
+  }
   const tz = appTimeZone();
   const w = checkInWindow(m, new Date(), tz);
   const selfStatus =
@@ -178,6 +188,7 @@ async function MeetingView({ params }: { params: PageProps<"/roundtables/[id]">[
             status: r.status,
             error: r.error,
             timing: r.status === "sent" ? null : timingFor(r),
+            retryTo: retryTo.get(r.id) ?? null,
           }))}
         />
       )}

@@ -979,6 +979,39 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(await rem.approveReminder(actor, tooLate.id)).toMatchObject({ ok: false, message: expect.stringContaining("Too late") });
   });
 
+  it("sends a reminder that didn't go, now, as the admin who asks", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const rem = await import("@/lib/reminders/service");
+    const sent: Record<string, string>[] = [];
+    let failWith: string | null = "Resend: validation_error: Your plan includes 3 segments. Upgrade to add more.";
+    const mailer = {
+      unsubscribedEmails: async () => [],
+      clearSegments: async () => 0,
+      createSegment: async () => "seg-now",
+      sendBroadcast: async (opts: Record<string, string>) => {
+        if (failWith) throw new Error(failWith);
+        sent.push(opts);
+        return "bc-now";
+      },
+      sendTest: async () => {},
+    };
+    const made = await att.createMeeting(actor, { date: "2027-02-10", startTime: "19:00", endTime: "20:30", title: "", format: "in_person", status: "held", notes: "", place: "", joinUrl: "" });
+    await rem.draftUsual(actor, made.id!, "https://rt.example.org");
+    const week = (await rem.remindersFor(made.id!)).find((r) => r.kind === "week_before")!;
+    // Only one that failed.
+    expect(await rem.sendReminderNow(actor, week.id, mailer)).toMatchObject({ ok: false, message: expect.stringContaining("didn't send") });
+    await db.update(schema.reminder).set({ status: "failed", error: "earlier failure" }).where(eq(schema.reminder.id, week.id));
+    // Still failing: back to failed, with the new reason.
+    expect(await rem.sendReminderNow(actor, week.id, mailer)).toMatchObject({ ok: false, message: expect.stringContaining("segments at a time") });
+    expect(await rem.getReminder(week.id)).toMatchObject({ status: "failed", error: expect.stringContaining("segments at a time") });
+    failWith = null;
+    expect(await rem.sendReminderNow(actor, week.id, mailer)).toMatchObject({ ok: true });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ replyTo: "admin@example.com", subject: week.subject });
+    expect(await rem.getReminder(week.id)).toMatchObject({ status: "sent", error: null });
+    expect(await rem.sendReminderNow(actor, week.id, mailer)).toMatchObject({ ok: false, message: expect.stringContaining("already gone out") });
+  });
+
   it("compares a list with contacts and adds the people it's missing", async () => {
     const lists = await import("@/lib/contacts/list-compare");
     const { compareToContacts } = await import("@/lib/contacts/compare");
