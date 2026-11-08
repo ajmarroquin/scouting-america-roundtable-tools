@@ -12,6 +12,8 @@ It's a small web app behind an email sign-in, built for a roundtable team of a f
 
 Import the "all registered people" export from Scouting America's reports. The app keeps adults only, filters to your district, merges people who appear on several rows, and shows what will change before anything is saved. Re-importing a newer file updates people instead of duplicating them. Copy emails for a broad message, or export to CSV or Excel.
 
+Got a list from someone else with just names, emails, and phones? **Compare a list** reads the Excel or CSV file in your browser (nothing is uploaded) and shows who's already in contacts, who isn't, and who needs a look, matching on email or phone together with the name, or the name alone (nicknames and small typos count). Download the results, add the people who are missing, and put everyone on the list in a group.
+
 ![Importing a roster export: a preview of who's new and who changed](docs/screenshots/roster-import.png)
 
 ![The contact list with filters and copy emails](docs/screenshots/contacts.png)

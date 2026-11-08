@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon, PlusIcon, SettingsIcon, UploadIcon } from "lucide-react";
+import { DownloadIcon, ListChecksIcon, PlusIcon, SettingsIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -248,15 +248,20 @@ export function ContactsTable({
             }}
           >
             {canImport && (
-              <>
-                <DropdownMenuItem asChild>
-                  <Link href="/contacts/import">
-                    <UploadIcon /> Import roster
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
+              <DropdownMenuItem asChild>
+                <Link href="/contacts/import">
+                  <UploadIcon /> Import roster
+                </Link>
+              </DropdownMenuItem>
             )}
+            {canEdit && (
+              <DropdownMenuItem asChild>
+                <Link href="/contacts/compare">
+                  <ListChecksIcon /> Compare a list with contacts
+                </Link>
+              </DropdownMenuItem>
+            )}
+            {canEdit && <DropdownMenuSeparator />}
             <DropdownMenuLabel>Export the {filtered.length} shown</DropdownMenuLabel>
             <DropdownMenuItem
               disabled={filtered.length === 0}

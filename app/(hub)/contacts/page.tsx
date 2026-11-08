@@ -40,15 +40,19 @@ async function ContactsData({ searchParams }: { searchParams: PageProps<"/contac
     ...AUDIENCES.filter((a) => a.key !== "everyone").map((a) => ({ value: a.key, label: a.label, custom: false, description: a.description })),
     ...groups.map((g) => ({ value: groupKey(g.id), label: g.name, custom: true })),
   ];
+  const initialGroup = typeof group === "string" && groupOptions.some((o) => o.value === group) ? group : undefined;
+  const startAdding = canEdit && add === "1";
   return (
     <ContactsTable
+      // The page stays mounted between visits, so a new ?group= or ?add= starts the list fresh.
+      key={`${initialGroup ?? ""}|${startAdding}`}
       contacts={contacts}
       units={units}
       memberships={memberships}
       groupOptions={groupOptions}
-      initialGroup={typeof group === "string" && groupOptions.some((o) => o.value === group) ? group : undefined}
+      initialGroup={initialGroup}
       fromRoster={fromRoster}
-      startAdding={canEdit && add === "1"}
+      startAdding={startAdding}
       canEdit={canEdit}
       canImport={hasRole(user.role, "admin")}
     />

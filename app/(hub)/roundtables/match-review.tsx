@@ -62,11 +62,13 @@ export function MatchReview({
   people,
   onDecide,
   newLabel = "Add as a new contact",
+  skipLabel = "Skip",
 }: {
   rows: ReviewRow[];
   people: CheckInPerson[];
   onDecide: (key: string, decision: Decision) => void;
   newLabel?: string;
+  skipLabel?: string;
 }) {
   const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const needsLook = rows.filter((r) => r.result.status !== "matched" || r.decision.kind === "undecided");
@@ -122,7 +124,7 @@ export function MatchReview({
       ) : (
         <ul className="flex flex-col divide-y rounded-xl border" aria-label="People to review">
           {shown.map((row) => (
-            <ReviewItem key={row.key} row={row} people={people} describe={describe} onDecide={onDecide} newLabel={newLabel} />
+            <ReviewItem key={row.key} row={row} people={people} describe={describe} onDecide={onDecide} newLabel={newLabel} skipLabel={skipLabel} />
           ))}
         </ul>
       )}
@@ -136,12 +138,14 @@ function ReviewItem({
   describe,
   onDecide,
   newLabel,
+  skipLabel,
 }: {
   row: ReviewRow;
   people: CheckInPerson[];
   describe: (id: string) => string;
   onDecide: (key: string, decision: Decision) => void;
   newLabel: string;
+  skipLabel: string;
 }) {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
@@ -189,7 +193,7 @@ function ReviewItem({
             <SelectSeparator />
             <SelectItem value="search">Someone else…</SelectItem>
             <SelectItem value="new">{newLabel}</SelectItem>
-            <SelectItem value="skip">Skip</SelectItem>
+            <SelectItem value="skip">{skipLabel}</SelectItem>
           </SelectContent>
         </Select>
         {row.decision.kind === "existing" && (
