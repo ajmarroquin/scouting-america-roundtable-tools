@@ -47,8 +47,10 @@ export function CopyEmails({
   optionsOpen,
   onOptionsOpenChange,
   optionsButton = true,
+  variant = "default",
 }: {
   contacts: EmailSource[];
+  variant?: "default" | "outline";
   optionsOpen?: boolean;
   onOptionsOpenChange?: (open: boolean) => void;
   optionsButton?: boolean;
@@ -87,6 +89,7 @@ export function CopyEmails({
         <div className="flex items-center gap-2">
           <Button
             size="sm"
+            variant={variant}
             disabled={emails.length === 0}
             // In batches, the panel is where you pick which batch to copy.
             onClick={() => (groups.length > 1 ? setOpen(true) : void copy(emails, `${emails.length} emails`))}

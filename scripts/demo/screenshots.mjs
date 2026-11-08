@@ -255,10 +255,11 @@ await admin.getByRole("option", { name: "2025-26 scouting year" }).click();
 await shot(admin, "attendance");
 // A unit typed in by hand, as for a walk-in, shows up flagged.
 await open(admin, "/units?year=2025-26");
+await admin.getByRole("button", { name: "Add unit" }).click();
 await admin.getByLabel("Number").fill("99");
 await admin.getByRole("combobox", { name: "Designation" }).click();
 await admin.getByRole("option", { name: "Family" }).click();
-await admin.getByRole("button", { name: "Add unit" }).click();
+await admin.getByRole("button", { name: "Save unit" }).click();
 await admin.getByRole("row").filter({ hasText: "Pack 99" }).waitFor();
 await admin.evaluate(() => window.scrollTo(0, 0));
 await shot(admin, "units");

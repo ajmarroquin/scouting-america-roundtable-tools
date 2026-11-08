@@ -29,6 +29,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/attendance", destination: "/roundtables", permanent: true },
       { source: "/attendance/:path*", destination: "/roundtables/:path*", permanent: true },
+      // Adding a contact opens on the contacts list now.
+      { source: "/contacts/new", destination: "/contacts?add=1", permanent: true },
     ];
   },
   async headers() {

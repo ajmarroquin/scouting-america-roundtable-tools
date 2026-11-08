@@ -1,28 +1,17 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { appTimeZone } from "@/lib/attendance/queries";
 import { lastSignInLabel, signInTimestamp } from "@/lib/auth/last-sign-in";
-import { hasRole, ROLE_DESCRIPTIONS, ROLE_LABELS, ROLES } from "@/lib/auth/roles";
+import { hasRole } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
 import { listUsers } from "@/lib/users";
-import { AddUserForm } from "./add-user-form";
-import { RemoveUserButton, RoleSelect, SendWelcomeButton, UserName } from "./user-row-actions";
+import { UsersView } from "./users-view";
 
 export const metadata: Metadata = { title: "Users" };
 
 export default function UsersPage() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-2xl font-semibold">Users</h1>
         <p className="text-sm text-muted-foreground">
@@ -44,79 +33,18 @@ async function UsersPanel() {
   const users = await listUsers();
   const timeZone = appTimeZone();
   const now = new Date();
-  const signedIn = (at: Date | null) => (
-    <span className={at ? "" : "text-muted-foreground"} title={at ? signInTimestamp(at, timeZone) : "Hasn't signed in yet"}>
-      {lastSignInLabel(at, timeZone, now)}
-    </span>
-  );
-
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Add a user</CardTitle>
-          <CardDescription>
-            <ul className="mt-1 list-disc pl-5">
-              {ROLES.map((role) => (
-                <li key={role}>
-                  <span className="font-medium text-foreground">{ROLE_LABELS[role]}:</span>{" "}
-                  {ROLE_DESCRIPTIONS[role]}
-                </li>
-              ))}
-            </ul>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AddUserForm />
-        </CardContent>
-      </Card>
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Email</TableHead>
-            <TableHead className="hidden sm:table-cell">Name</TableHead>
-            <TableHead className="hidden sm:table-cell">Last sign-in</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead className="text-right">
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.map((u) => (
-            <TableRow key={u.id}>
-              <TableCell className="max-w-48 truncate">
-                {u.email}
-                {u.id === me.id && (
-                  <Badge variant="outline" className="ml-2">
-                    You
-                  </Badge>
-                )}
-                <div className="sm:hidden">
-                  <UserName key={u.name} userId={u.id} name={u.name} />
-                  <div className="text-xs text-muted-foreground">Last sign-in: {signedIn(u.lastSignInAt)}</div>
-                </div>
-              </TableCell>
-              <TableCell className="hidden sm:table-cell">
-                <UserName key={u.name} userId={u.id} name={u.name} />
-              </TableCell>
-              <TableCell className="hidden whitespace-nowrap sm:table-cell">{signedIn(u.lastSignInAt)}</TableCell>
-              <TableCell>
-                <RoleSelect userId={u.id} role={u.role} />
-              </TableCell>
-              <TableCell className="text-right">
-                {u.id !== me.id && (
-                  <div className="flex justify-end gap-1">
-                    <SendWelcomeButton userId={u.id} email={u.email} />
-                    <RemoveUserButton userId={u.id} email={u.email} />
-                  </div>
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </>
+    <UsersView
+      users={users.map((u) => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        isMe: u.id === me.id,
+        signedIn: lastSignInLabel(u.lastSignInAt, timeZone, now),
+        signedInTitle: u.lastSignInAt ? signInTimestamp(u.lastSignInAt, timeZone) : "Hasn't signed in yet",
+        hasSignedIn: !!u.lastSignInAt,
+      }))}
+    />
   );
 }

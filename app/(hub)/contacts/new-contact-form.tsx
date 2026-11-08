@@ -11,14 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { AffiliationInput } from "@/lib/contacts/affiliation-input";
 import type { UnitOption } from "@/lib/contacts/queries";
-import { createContactAction } from "../actions";
-import { AffiliationPicker, EMPTY_PICK, type Pick, pickToInput } from "../affiliation-picker";
+import { createContactAction } from "./actions";
+import { AffiliationPicker, EMPTY_PICK, type Pick, pickToInput } from "./affiliation-picker";
 
 let nextRowId = 1;
 type Row = { id: number; pick: Pick };
 const newRow = (): Row => ({ id: nextRowId++, pick: EMPTY_PICK });
 
-export function NewContactForm({ units, fromRoster }: { units: UnitOption[]; fromRoster: string[] }) {
+export function NewContactForm({ units, fromRoster, onCancel }: { units: UnitOption[]; fromRoster: string[]; onCancel: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [isYouth, setIsYouth] = useState(false);
@@ -62,38 +62,38 @@ export function NewContactForm({ units, fromRoster }: { units: UnitOption[]; fro
       }}
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="firstName">First name</Label>
-        <Input id="firstName" name="firstName" required autoComplete="off" />
+        <Label htmlFor="new-firstName">First name</Label>
+        <Input id="new-firstName" name="firstName" required autoComplete="off" />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="lastName">Last name</Label>
-        <Input id="lastName" name="lastName" autoComplete="off" />
+        <Label htmlFor="new-lastName">Last name</Label>
+        <Input id="new-lastName" name="lastName" autoComplete="off" />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" autoComplete="off" />
+        <Label htmlFor="new-email">Email</Label>
+        <Input id="new-email" name="email" type="email" autoComplete="off" />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="phone">Phone</Label>
-        <Input id="phone" name="phone" type="tel" autoComplete="off" />
+        <Label htmlFor="new-phone">Phone</Label>
+        <Input id="new-phone" name="phone" type="tel" autoComplete="off" />
       </div>
 
       <div className="flex items-center gap-2 sm:col-span-2">
-        <Checkbox id="walkIn" name="walkIn" />
-        <Label htmlFor="walkIn" className="font-normal">
+        <Checkbox id="new-walkIn" name="walkIn" />
+        <Label htmlFor="new-walkIn" className="font-normal">
           Walk-in at a roundtable
         </Label>
       </div>
       <div className="flex items-center gap-2 sm:col-span-2">
-        <Checkbox id="isYouth" checked={isYouth} onCheckedChange={(v) => setIsYouth(v === true)} />
-        <Label htmlFor="isYouth" className="font-normal">
+        <Checkbox id="new-isYouth" checked={isYouth} onCheckedChange={(v) => setIsYouth(v === true)} />
+        <Label htmlFor="new-isYouth" className="font-normal">
           This is a youth member
         </Label>
       </div>
       {isYouth && (
         <div className="flex flex-col gap-2 sm:col-span-2">
-          <Label htmlFor="guardianEmail">Parent or guardian email</Label>
-          <Input id="guardianEmail" name="guardianEmail" type="email" required autoComplete="off" />
+          <Label htmlFor="new-guardianEmail">Parent or guardian email</Label>
+          <Input id="new-guardianEmail" name="guardianEmail" type="email" required autoComplete="off" />
           <p className="text-xs text-muted-foreground">
             Required. Whenever this youth is in a copied or exported email list, this address comes along, so nothing goes
             to them one-on-one.
@@ -140,9 +140,12 @@ export function NewContactForm({ units, fromRoster }: { units: UnitOption[]; fro
           )}
         </p>
       )}
-      <div className="sm:col-span-2">
+      <div className="flex gap-2 sm:col-span-2">
         <Button type="submit" disabled={pending}>
-          {pending ? "Adding…" : "Add contact"}
+          {pending ? "Saving…" : "Save contact"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
         </Button>
       </div>
     </form>
