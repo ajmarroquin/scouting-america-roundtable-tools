@@ -386,6 +386,23 @@ AJ's choices: a reminder a week before and the day of, at 9 am Eastern, and noth
 3. The join link appears only after a match or an RSVP.
 4. Reminders wait for AJ's answer on timing and audiences (6D).
 
+## Contact upkeep
+
+### Compare a list (built)
+
+For a list someone sends with names, emails, and phones but no units (the district commissioner's spreadsheet, a training roster). `/contacts/compare`, editors, from the Contacts ⋮ menu.
+
+- The .xlsx, CSV, or pasted cells are read in the browser and matched there (`lib/contacts/compare.ts`, pure and tested); nothing is uploaded or stored. It finds the header row and the First Name, Last Name (or one Name), Suffix, Email, and Phone columns, and ignores the rest.
+- A match is the same email or phone (either contact email, any phone format) together with the name, or the name alone when only one contact fits, with nicknames and small typos. A shared family email or phone with a different name, or two contacts with one name, waits for a person to pick, using the same review as an old sheet.
+- Then: download the results (Excel, with who each person matched and why) or the ones not in contacts (CSV); add the missing people as adults with no unit yet (`lib/contacts/list-compare.ts`); and optionally put everyone on the list in a new group. A taken group name stops before anyone is added.
+
+### Data checks (next, admins)
+
+A page that lists what needs fixing, each with a link to fix it, worked out fresh on every visit and kept inside the app:
+
+- **Contacts:** adults with no unit or position (like hand-added people and anyone added from a compared list), no email, likely duplicates (same last name and the same first name or nickname, or the same email with the same name), people from self check-in still waiting for review, and hand-added people never seen in a roster import.
+- **Units:** missing part of their Key 3 (no unit leader, committee chair, or unit rep in contacts), not on the council's unit list, and on the list but with nobody in contacts.
+
 ## Demo and screenshots
 
 - `scripts/demo/data.mjs` generates a made-up district, the same every run: 18 units (plus one new on the unit list and one with no members), about 100 adults with positions, youth rows the import skips, last year's sign-in sheet with nicknames, a first name alone, a last initial, and a typo, and a Zoom report with a renamed attendee and a device.

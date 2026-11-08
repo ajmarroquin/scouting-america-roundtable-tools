@@ -947,4 +947,41 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(await rem.deleteReminder(actor, day.id)).toMatchObject({ ok: true });
     expect(await rem.deleteReminder(actor, week.id)).toMatchObject({ ok: false });
   });
+  it("compares a list with contacts and adds the people it's missing", async () => {
+    const lists = await import("@/lib/contacts/list-compare");
+    const { compareToContacts } = await import("@/lib/contacts/compare");
+    const people = await lists.compareData();
+    const pat = people.find((p) => p.firstName === "Pat")!;
+    expect(pat).toHaveProperty("phone");
+    // Pat shares a family email with Sam; the name settles it.
+    const matched = compareToContacts({ firstName: "Pat", lastName: "Testcase", suffix: "", email: pat.email ?? "", phone: "" }, people);
+    expect(matched.status).toBe("matched");
+    expect(matched.candidates[0].id).toBe(pat.id);
+    expect(compareToContacts({ firstName: "Quincy", lastName: "Newperson", suffix: "", email: "quincy@example.com", phone: "" }, people).status).toBe("none");
+
+    // A group name that's taken stops everything before anyone is added.
+    const groups = await import("@/lib/groups/store");
+    expect(await groups.createGroup(actor, { name: "Taken" })).toMatchObject({ ok: true });
+    expect(await lists.addFromList(actor, { add: [{ firstName: "Quincy", lastName: "Newperson", email: "quincy@example.com", phone: "" }], existingIds: [], groupName: "Taken" })).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("already a group"),
+    });
+    expect(await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Quincy"))).toHaveLength(0);
+
+    const result = await lists.addFromList(actor, {
+      add: [
+        { firstName: "Quincy", lastName: "Newperson", email: "quincy@example.com", phone: "212 555 0199" },
+        { firstName: "Rory", lastName: "Bademail", email: "not-an-email", phone: "" },
+        { firstName: "Pat", lastName: "Testcase", email: pat.email ?? "", phone: "" },
+      ],
+      existingIds: [pat.id],
+      groupName: "DC list",
+    });
+    expect(result).toMatchObject({ ok: true, message: 'Added 2 contacts, 1 was already in contacts, put 3 in "DC list".', failed: [] });
+    const [quincy] = await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Quincy"));
+    expect(quincy).toMatchObject({ lastName: "Newperson", email: "quincy@example.com", phone: "(212) 555-0199", isYouth: false, source: "manual" });
+    const [rory] = await db.select().from(schema.contact).where(eq(schema.contact.firstName, "Rory"));
+    expect(rory.email).toBeNull();
+    expect((await groups.groupMemberIds(result.groupId!)).sort()).toEqual([pat.id, quincy.id, rory.id].sort());
+  });
 });
