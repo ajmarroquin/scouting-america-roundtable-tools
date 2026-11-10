@@ -1073,6 +1073,16 @@ describe.skipIf(!local)("import against Postgres", () => {
     await att.setRepresentedUnit(actor, row.attendanceId, null);
     expect(await counted(thisYear)).toEqual([u1.id, u2.id, u3.id].sort());
     expect(await counted(lastYear)).toEqual([u1.id]);
+
+    // A recap goes to everyone who came: "Came on Jan 14, 2027".
+    const audiences = await import("@/lib/announcements/audiences");
+    expect(await audiences.audienceInfo(`came:${thisYear}`)).toMatchObject({ label: "Came on Jan 14, 2027", kind: "meeting" });
+    expect((await audiences.audienceMembers(`came:${thisYear}`)).map((p) => p.email)).toEqual(["casey.counter@example.org"]);
+    // The two latest roundtables anyone came to are offered, and can be combined with other lists.
+    const offered = (await audiences.audienceOptions()).filter((o) => o.key.startsWith("came:"));
+    expect(offered).toHaveLength(2);
+    expect(offered.every((o) => o.label.startsWith("Came on ") && o.count > 0)).toBe(true);
+    expect(audiences.isAudienceKey(`came:${thisYear},unit-leaders`)).toBe(true);
   });
 
   it("compares a list with contacts and adds the people it's missing", async () => {

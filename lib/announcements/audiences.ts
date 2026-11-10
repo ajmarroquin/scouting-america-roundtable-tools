@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { representation } from "@/lib/attendance/coverage";
 import { coverageForYear } from "@/lib/attendance/metrics";
 import { appTimeZone } from "@/lib/attendance/queries";
@@ -7,7 +7,7 @@ import { meetingDateLabel, scoutingYearOf, todayIn, yearRange } from "@/lib/atte
 import { OUTREACH_POSITIONS } from "@/lib/contacts/positions";
 import { db } from "@/lib/db";
 import { contactName, unitLabel } from "@/lib/contacts/format";
-import { affiliation, contact, meeting, rsvp, unit } from "@/lib/db/schema";
+import { affiliation, attendance, contact, meeting, rsvp, unit } from "@/lib/db/schema";
 import { rolesFor } from "@/lib/contacts/roles";
 import { getGroup, groupMemberIds, groupMembership, groupsOf, listGroups } from "@/lib/groups/store";
 import type { Member } from "./mailer";
@@ -98,9 +98,26 @@ async function rsvpInfo(key: string): Promise<AudienceInfo | null> {
     : { key, label: `Haven't answered for ${day}`, description: "Everyone in contacts who hasn't RSVP'd for this meeting yet.", custom: true, kind: "meeting" };
 }
 
+// Everyone checked in at a roundtable, for a recap: "came:<meeting id>".
+const CAME_KEY = /^came:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const cameTo = (key: string) => CAME_KEY.exec(key)?.[1] ?? null;
+async function cameInfo(key: string): Promise<AudienceInfo | null> {
+  const id = cameTo(key);
+  if (!id) return null;
+  const [m] = await db.select({ date: meeting.date }).from(meeting).where(eq(meeting.id, id));
+  if (!m) return null;
+  return {
+    key,
+    label: `Came on ${meetingDateLabel(m.date, "short")}`,
+    description: "Everyone checked in at this roundtable: at the door, on their phone, or from a pasted list.",
+    custom: true,
+    kind: "meeting",
+  };
+}
+
 /** A built-in audience or a group's key, by shape. Whether the group still exists is checked when it's used. */
 function isSingleKey(key: string): boolean {
-  return isAudience(key) || groupIdOf(key) !== null || rsvpOf(key) !== null;
+  return isAudience(key) || groupIdOf(key) !== null || rsvpOf(key) !== null || cameTo(key) !== null;
 }
 
 // Several lists at once, joined by commas: "packs,troops". One email per person, whoever's in more than one.
@@ -130,6 +147,7 @@ async function singleInfo(key: string): Promise<AudienceInfo | null> {
   const builtIn = AUDIENCES.find((a) => a.key === key);
   if (builtIn) return { ...builtIn, custom: false };
   if (rsvpOf(key)) return rsvpInfo(key);
+  if (cameTo(key)) return cameInfo(key);
   const id = groupIdOf(key);
   const group = id ? await getGroup(id) : null;
   return group ? { key, label: group.name, description: group.description || "A group built by hand.", custom: true } : null;
@@ -149,6 +167,8 @@ export async function audienceContactIds(key: string): Promise<string[] | "all">
 async function singleContactIds(key: string): Promise<string[] | "all"> {
   const id = groupIdOf(key);
   if (id) return groupMemberIds(id);
+  const came = cameTo(key);
+  if (came) return (await db.select({ id: attendance.contactId }).from(attendance).where(eq(attendance.meetingId, came))).map((a) => a.id);
   const r = rsvpOf(key);
   if (r) {
     const answered = await db.select({ id: rsvp.contactId, response: rsvp.response }).from(rsvp).where(eq(rsvp.meetingId, r.meetingId));
@@ -281,22 +301,33 @@ export type AudienceOption = AudienceInfo & { count: number };
 
 /** Every audience to pick from, built-in first, with how many it reaches. */
 export async function audienceOptions(): Promise<AudienceOption[]> {
-  const [groups, upcoming] = await Promise.all([
+  const today = todayIn(appTimeZone());
+  const [groups, upcoming, recent] = await Promise.all([
     listGroups(),
     // The next two meetings with a link, so RSVPs are possible.
     db
       .select({ id: meeting.id })
       .from(meeting)
-      .where(and(eq(meeting.status, "held"), gte(meeting.date, todayIn(appTimeZone())), isNotNull(meeting.publicToken)))
+      .where(and(eq(meeting.status, "held"), gte(meeting.date, today), isNotNull(meeting.publicToken)))
       .orderBy(asc(meeting.date))
       .limit(2),
+    // The last two roundtables anyone came to, for a recap.
+    db
+      .selectDistinct({ id: meeting.id, date: meeting.date })
+      .from(meeting)
+      .innerJoin(attendance, eq(attendance.meetingId, meeting.id))
+      .where(and(eq(meeting.status, "held"), lte(meeting.date, today)))
+      .orderBy(desc(meeting.date))
+      .limit(2),
   ]);
+  const came = (await Promise.all(recent.map((m) => cameInfo(`came:${m.id}`)))).filter((a): a is AudienceInfo => a !== null);
   const meetings = (await Promise.all(upcoming.flatMap((m) => [rsvpInfo(`rsvp-yes:${m.id}`), rsvpInfo(`rsvp-none:${m.id}`)]))).filter(
     (a): a is AudienceInfo => a !== null,
   );
   const all: AudienceInfo[] = [
     ...AUDIENCES.map((a) => ({ ...a, custom: false, kind: "built_in" as const })),
     ...groups.map((g) => ({ key: groupKey(g.id), label: g.name, description: g.description || "A group built by hand.", custom: true, kind: "group" as const })),
+    ...came,
     ...meetings,
   ];
   return Promise.all(all.map(async (a) => ({ ...a, count: (await audienceMembers(a.key)).length })));
