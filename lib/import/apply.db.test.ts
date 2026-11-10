@@ -712,7 +712,7 @@ describe.skipIf(!local)("import against Postgres", () => {
     const person = (found as { person: import("@/lib/selfcheckin/service").Person }).person;
     expect(person.units.length).toBeGreaterThan(0);
     // Only a first name and unit labels come back.
-    expect(Object.keys(person).sort()).toEqual(["alreadyIn", "contactId", "firstName", "representing", "rsvp", "units"]);
+    expect(Object.keys(person).sort()).toEqual(["alreadyIn", "contactId", "firstName", "leaving", "rsvp", "units"]);
     // Each unit comes with their role there, so they can confirm it at a glance.
     expect(person.units[0]).toMatchObject({ pending: false, role: expect.any(String) });
     expect(person.units[0].role!.length).toBeGreaterThan(0);
@@ -730,41 +730,48 @@ describe.skipIf(!local)("import against Postgres", () => {
     const kid = { email: "kid@example.com", lastName: "Testcase" };
     expect(await sci.identify(token, kid, ip, open)).toEqual({ ok: true, kind: "new" });
 
-    // Alex represents one of their units tonight and claims another.
+    // Alex represents every unit on their record without doing anything, and claims one more.
     const units = await sci.unitChoices();
     const mine = person.units[0];
+    const record = person.units.map((u) => u.id);
     const other = units.find((u) => !person.units.some((p) => p.id === u.id))!;
-    const done = await sci.confirm(token, { ...who, contactId: alex.id, representing: [mine.id], leaving: [], adding: [{ unitId: other.id, role: "Den Leader" }] }, ip, open);
+    const done = await sci.confirm(token, { ...who, contactId: alex.id, leaving: [], adding: [{ unitId: other.id, role: "Den Leader" }] }, ip, open);
     expect(done).toMatchObject({ ok: true, message: expect.stringContaining("A volunteer will update your record") });
     // Alex matched a contact, so the claimed unit counts now; the review is only about the record.
     let m = await queries.getMeeting(meetingId);
-    expect(m!.unitsRepresented.map((u) => u.id).sort()).toEqual([mine.id, other.id].sort());
+    expect(m!.unitsRepresented.map((u) => u.id).sort()).toEqual([...record, other.id].sort());
     expect(m!.attendees[0]).toMatchObject({ method: "self_check_in" });
-    expect(m!.attendees[0].confirmedLabels.sort()).toEqual([mine.label, other.label].sort());
+    expect(m!.attendees[0].confirmedLabels.sort()).toEqual([...person.units.map((u) => u.label), other.label].sort());
+    // An older copy of the page still sends what was ticked; it doesn't take units away any more.
+    await sci.confirm(token, { ...who, contactId: alex.id, representing: [], leaving: [], adding: [{ unitId: other.id, role: "Den Leader" }] }, ip, open);
+    expect((await queries.getMeeting(meetingId))!.unitsRepresented.map((u) => u.id).sort()).toEqual([...record, other.id].sort());
     expect(m!.attendees[0].roles.length).toBeGreaterThan(0);
 
     let reviews = await sci.openReviews(meetingId);
     expect(reviews.map((r) => [r.kind, r.unitLabel, r.role, r.newPerson])).toEqual([["add_unit", other.label, "Den Leader", false]]);
 
-    // Checking in again starts from what they said, shows the claim as waiting, and doesn't duplicate or drop it.
+    // Checking in again shows the claim as waiting, and "Looks right" doesn't duplicate or drop it.
     const again = (await sci.identify(token, who, ip, open)) as { person: import("@/lib/selfcheckin/service").Person };
-    expect(again.person).toMatchObject({ alreadyIn: true });
-    expect(again.person.representing!.sort()).toEqual([mine.id, other.id].sort());
+    expect(again.person).toMatchObject({ alreadyIn: true, leaving: [] });
     expect(again.person.units.find((u) => u.id === other.id)).toMatchObject({ pending: true, role: "Den Leader" });
-    await sci.confirm(token, { ...who, contactId: alex.id, representing: again.person.representing!, leaving: [], adding: [] }, ip, open);
+    await sci.confirm(token, { ...who, contactId: alex.id, leaving: again.person.leaving, adding: [] }, ip, open);
     expect((await sci.openReviews(meetingId)).map((r) => [r.kind, r.unitLabel])).toEqual([["add_unit", other.label]]);
-    expect((await queries.getMeeting(meetingId))!.unitsRepresented.map((u) => u.id).sort()).toEqual([mine.id, other.id].sort());
+    expect((await queries.getMeeting(meetingId))!.unitsRepresented.map((u) => u.id).sort()).toEqual([...record, other.id].sort());
     expect(await sci.approveReview(actor, reviews[0].id)).toMatchObject({ ok: true });
     expect(await sci.approveReview(actor, reviews[0].id)).toMatchObject({ ok: false });
     m = await queries.getMeeting(meetingId);
-    expect(m!.unitsRepresented.map((u) => u.id).sort()).toEqual([mine.id, other.id].sort());
+    expect(m!.unitsRepresented.map((u) => u.id).sort()).toEqual([...record, other.id].sort());
     const [aff] = await db.select().from(schema.affiliation).where(and(eq(schema.affiliation.contactId, alex.id), eq(schema.affiliation.unitId, other.id)));
     expect(aff).toMatchObject({ position: "Den Leader", source: "manual" });
 
-    // Confirming again replaces it: unticking everything means no unit tonight.
-    await sci.confirm(token, { ...who, contactId: alex.id, representing: [], leaving: [mine.id], adding: [] }, ip, open);
+    // Saying they've left a unit takes it off tonight and asks an editor; the page remembers it, and asks only once.
+    await sci.confirm(token, { ...who, contactId: alex.id, leaving: [mine.id], adding: [] }, ip, open);
     m = await queries.getMeeting(meetingId);
-    expect(m!.unitsRepresented).toEqual([]);
+    expect(m!.unitsRepresented.map((u) => u.id)).not.toContain(mine.id);
+    expect(m!.unitsRepresented.map((u) => u.id)).toContain(other.id);
+    const remembered = (await sci.identify(token, who, ip, open)) as { person: import("@/lib/selfcheckin/service").Person };
+    expect(remembered.person.leaving).toEqual([mine.id]);
+    await sci.confirm(token, { ...who, contactId: alex.id, leaving: [mine.id], adding: [] }, ip, open);
     reviews = await sci.openReviews(meetingId);
     expect(reviews).toMatchObject([{ kind: "remove_unit", unitLabel: mine.label, fromRoster: true }]);
     // A roster unit stays until the next import says otherwise.
@@ -815,8 +822,19 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(await att.updateMeeting(actor, meetingId, { ...hybrid, joinUrl: "http://example.org/zoom" })).toMatchObject({ ok: false });
     expect(await att.updateMeeting(actor, meetingId, { ...hybrid, joinUrl: "https://example.org/zoom" })).toMatchObject({ ok: true });
     expect((await sci.publicMeeting(newToken, open))?.place).toBe("St. Mark's Hall");
-    const joined = await sci.confirm(newToken, { ...who, contactId: alex.id, representing: [], leaving: [], adding: [] }, ip, open);
+    const joined = await sci.confirm(newToken, { ...who, contactId: alex.id, leaving: [], adding: [] }, ip, open);
     expect(joined).toMatchObject({ ok: true, joinUrl: "https://example.org/zoom" });
+
+    // Checked in at the door first, then on their phone: their record units still count.
+    const samRow = (await db.select().from(schema.contact).where(eq(schema.contact.id, sam.contactId)))[0];
+    await att.checkIn(actor, meetingId, samRow.id);
+    const samWho = { email: samRow.email!, lastName: samRow.lastName };
+    const samFound = (await sci.pick(newToken, samWho, samRow.id, ip, open)) as { person: import("@/lib/selfcheckin/service").Person };
+    expect(samFound.person).toMatchObject({ alreadyIn: true, leaving: [] });
+    await sci.confirm(newToken, { ...samWho, contactId: samRow.id, leaving: [], adding: [] }, ip, open);
+    const samIn = (await queries.getMeeting(meetingId))!.attendees.find((a) => a.contactId === samRow.id)!;
+    expect(samIn.confirmedUnitIds!.sort()).toEqual(samFound.person.units.filter((u) => !u.pending).map((u) => u.id).sort());
+    expect(samIn.confirmedUnitIds!.length).toBeGreaterThan(0);
     expect((await queries.upcomingMeetings()).map((u) => u.date)).not.toContain("2026-11-19");
   });
 

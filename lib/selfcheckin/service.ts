@@ -47,8 +47,8 @@ export type Person = {
   firstName: string;
   units: PersonUnit[];
   alreadyIn: boolean;
-  /** Already checked in: the units they said they represent tonight. */
-  representing: string[] | null;
+  /** Units on their record they've said they're no longer with (waiting for an editor). */
+  leaving: string[];
   rsvp: Response | null;
 };
 
@@ -179,7 +179,7 @@ async function allUnitsOf(contactId: string): Promise<PersonUnit[]> {
 }
 
 async function personFor(meetingId: string, c: { id: string; firstName: string; preferredName: string | null }): Promise<Person> {
-  const [units, [existing], [answer]] = await Promise.all([
+  const [units, [existing], [answer], leaving] = await Promise.all([
     allUnitsOf(c.id),
     db
       .select({ id: attendance.id })
@@ -189,16 +189,17 @@ async function personFor(meetingId: string, c: { id: string; firstName: string; 
       .select({ response: rsvp.response })
       .from(rsvp)
       .where(and(eq(rsvp.meetingId, meetingId), eq(rsvp.contactId, c.id))),
+    db
+      .select({ unitId: checkinReview.unitId })
+      .from(checkinReview)
+      .where(and(eq(checkinReview.contactId, c.id), eq(checkinReview.kind, "remove_unit"), eq(checkinReview.status, "open"))),
   ]);
-  const representing = existing
-    ? (await db.select({ unitId: attendanceUnit.unitId }).from(attendanceUnit).where(eq(attendanceUnit.attendanceId, existing.id))).map((r) => r.unitId)
-    : null;
   return {
     contactId: c.id,
     firstName: c.preferredName || c.firstName,
     units,
     alreadyIn: !!existing,
-    representing,
+    leaving: [...new Set(leaving.map((r) => r.unitId!))].filter((id) => units.some((u) => u.id === id && !u.pending)),
     rsvp: (answer?.response as Response | undefined) ?? null,
   };
 }
@@ -238,15 +239,17 @@ const claim = z.object({ unitId: z.uuid(), role: z.string().trim().max(80).optio
 
 const confirmInput = identifyInput.extend({
   contactId: z.uuid(),
-  representing: z.array(z.uuid()).max(20),
+  // Sent by older copies of the page; their units now come from their record.
+  representing: z.array(z.uuid()).max(20).optional(),
   leaving: z.array(z.uuid()).max(20),
   adding: z.array(claim).max(10),
 });
 
 /**
- * Checks them in with the units they say they represent tonight. Units on
- * their record count now; units they add, and units they say they've left, go
- * to an editor. Confirming again replaces what they said before.
+ * Checks them in. Someone who matched a contact represents every unit on their
+ * record, so the page is only a chance to correct it: units they say they've
+ * left don't count and go to an editor, and units they add count now and go to
+ * an editor to be added. Confirming again replaces what they said before.
  */
 export async function confirm(token: string, raw: unknown, ip: string, now = new Date()): Promise<Done> {
   const parsed = confirmInput.safeParse(raw);
@@ -258,14 +261,15 @@ export async function confirm(token: string, raw: unknown, ip: string, now = new
   if (!person) return { ok: false, message: GENERIC };
   const units = await allUnitsOf(person.id);
   const theirs = new Set(units.map((u) => u.id));
-  const onRecord = new Set(units.filter((u) => !u.pending).map((u) => u.id));
   const active = new Set((await unitChoices()).map((u) => u.id));
-  const representing = [...new Set(input.representing)].filter((id) => theirs.has(id));
-  const leaving = [...new Set(input.leaving)].filter((id) => onRecord.has(id) && !representing.includes(id));
+  const gone = new Set(input.leaving);
+  // Every unit on their record counts, except ones they say they've left.
+  const representing = units.filter((u) => !u.pending && !gone.has(u.id)).map((u) => u.id);
+  const leaving = units.filter((u) => !u.pending && gone.has(u.id)).map((u) => u.id);
   const adding = input.adding.filter((a, i, all) => active.has(a.unitId) && !theirs.has(a.unitId) && all.findIndex((b) => b.unitId === a.unitId) === i);
-  // Earlier claims they still say they represent stay claims (and stay in review).
-  const stillClaimed = units.filter((u) => u.pending && representing.includes(u.id)).map((u) => ({ unitId: u.id, role: u.role ?? undefined }));
-  await record(g.meeting.id, person.id, representing.filter((id) => onRecord.has(id)), [...stillClaimed, ...adding], leaving, {
+  // Earlier claims stay claims (and stay in review) unless they take them back.
+  const stillClaimed = units.filter((u) => u.pending && !gone.has(u.id)).map((u) => ({ unitId: u.id, role: u.role ?? undefined }));
+  await record(g.meeting.id, person.id, representing, [...stillClaimed, ...adding], leaving, {
     claimsCount: !person.pendingReview,
   });
   const name = person.preferredName || person.firstName;
@@ -309,10 +313,12 @@ async function record(
     const drop = open.filter((r) => r.meetingId === meetingId && (r.kind === "remove_unit" || !claimed.includes(r.unitId!))).map((r) => r.id);
     if (drop.length) await tx.delete(checkinReview).where(inArray(checkinReview.id, drop));
     const alreadyClaimed = new Set(open.filter((r) => r.kind === "add_unit" && !drop.includes(r.id)).map((r) => r.unitId));
+    // Said at an earlier meeting and still waiting: don't ask the editor twice.
+    const alreadyLeaving = new Set(open.filter((r) => r.kind === "remove_unit" && !drop.includes(r.id)).map((r) => r.unitId));
     const reviews = [
       ...(newPerson ? [{ meetingId, contactId, kind: "new_person" }] : []),
       ...adding.filter((a) => !alreadyClaimed.has(a.unitId)).map((a) => ({ meetingId, contactId, kind: "add_unit", unitId: a.unitId, role: a.role || null })),
-      ...leaving.map((unitId) => ({ meetingId, contactId, kind: "remove_unit", unitId })),
+      ...leaving.filter((unitId) => !alreadyLeaving.has(unitId)).map((unitId) => ({ meetingId, contactId, kind: "remove_unit", unitId })),
     ];
     if (reviews.length) await tx.insert(checkinReview).values(reviews);
     await writeAudit(null, "self_check_in", { type: "attendance", id: row.id }, { meetingId, contactId, added: adding.length, leaving: leaving.length }, tx);
