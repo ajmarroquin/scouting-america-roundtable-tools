@@ -2,6 +2,7 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { countCheckInUnits, countNewUnitsThisYear } from "@/lib/attendance/check-in-units";
 import { appTimeZone, appToday } from "@/lib/attendance/today";
 import { writeAudit } from "@/lib/audit";
 import type { CurrentUser } from "@/lib/auth/session";
@@ -535,6 +536,8 @@ export async function approveReview(actor: CurrentUser, id: string): Promise<Don
         .insert(affiliation)
         .values({ contactId: r.contactId, unitId: r.unitId, position: r.role || SELF_REPORTED_ROLE, source: "manual" })
         .onConflictDoNothing();
+      // Now on their record, it counts for their other check-ins this scouting year too.
+      await countNewUnitsThisYear(tx, [{ contactId: r.contactId, unitId: r.unitId }]);
     } else if (r.kind === "remove_unit" && r.unitId) {
       // Only hand-added rows go; a roster row stays until the next import says otherwise.
       await tx.delete(affiliation).where(and(eq(affiliation.contactId, r.contactId), eq(affiliation.unitId, r.unitId), eq(affiliation.source, "manual")));
@@ -589,13 +592,22 @@ export async function mergeReview(actor: CurrentUser, id: string, intoContactId:
   if (into.isYouth) return { ok: false, message: "Self check-in is for adults; pick an adult contact." };
   await db.transaction(async (tx) => {
     const theirs = await tx.select().from(attendance).where(eq(attendance.contactId, from.id));
+    const moved: string[] = [];
     for (const a of theirs) {
       const [clash] = await tx
         .select({ id: attendance.id })
         .from(attendance)
         .where(and(eq(attendance.meetingId, a.meetingId), eq(attendance.contactId, into.id)));
       if (clash) await tx.delete(attendance).where(eq(attendance.id, a.id));
-      else await tx.update(attendance).set({ contactId: into.id }).where(eq(attendance.id, a.id));
+      else {
+        await tx.update(attendance).set({ contactId: into.id }).where(eq(attendance.id, a.id));
+        moved.push(a.id);
+      }
+    }
+    // Now it's a known contact: their record's units count, and so do the units they claimed.
+    if (moved.length) {
+      await tx.update(attendanceUnit).set({ approved: true }).where(inArray(attendanceUnit.attendanceId, moved));
+      await countCheckInUnits(tx, moved.map((id) => ({ id, contactId: into.id, unitId: null })));
     }
     const answers = await tx.select().from(rsvp).where(eq(rsvp.contactId, from.id));
     for (const a of answers) {

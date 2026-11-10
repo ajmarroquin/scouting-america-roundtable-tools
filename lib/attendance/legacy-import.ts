@@ -5,6 +5,7 @@ import { writeAudit } from "@/lib/audit";
 import type { CurrentUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { affiliation, attendance, contact, meeting, unit } from "@/lib/db/schema";
+import { countCheckInUnits } from "./check-in-units";
 import { checkInPeople } from "./queries";
 import { meetingDateLabel } from "./year";
 
@@ -191,8 +192,14 @@ export async function importLegacySheet(actor: CurrentUser, raw: LegacyImportInp
       }
     }
     const inserted = rows.length
-      ? await tx.insert(attendance).values(rows).onConflictDoNothing().returning({ id: attendance.id })
+      ? await tx
+          .insert(attendance)
+          .values(rows)
+          .onConflictDoNothing()
+          .returning({ id: attendance.id, contactId: attendance.contactId, unitId: attendance.unitId })
       : [];
+    // The unit the sheet named, or else every unit on their record.
+    await countCheckInUnits(tx, inserted);
 
     const counts = {
       meetingsAdded,

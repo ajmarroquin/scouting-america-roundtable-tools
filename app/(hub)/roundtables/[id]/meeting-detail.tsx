@@ -38,6 +38,26 @@ function report(result: Result) {
 
 const ALL_UNITS = "__all";
 
+type CountedAttendee = Pick<Attendee, "units" | "representedUnitId" | "confirmedUnitIds" | "confirmedLabels">;
+
+/** The units a check-in counts, however it was made. */
+function countedLabels(a: CountedAttendee): string {
+  if (a.confirmedUnitIds) return a.confirmedLabels.join(", ");
+  // Check-ins from before every check-in kept its units.
+  return a.representedUnitId ? (a.units.find((u) => u.id === a.representedUnitId)?.label ?? "") : a.units.map((u) => u.label).join(", ");
+}
+
+/** Several units, and it counts either all of them or just one: an editor can switch between the two. */
+function narrowable(a: CountedAttendee): boolean {
+  if (a.units.length < 2) return false;
+  if (!a.confirmedUnitIds) return true;
+  const counted = new Set(a.confirmedUnitIds);
+  const all = a.units.every((u) => counted.has(u.id)) && counted.size === a.units.length;
+  // A unit named on the check-in that isn't on their record (an old sheet) shows as text.
+  const narrowed = !!a.representedUnitId && a.units.some((u) => u.id === a.representedUnitId) && counted.size === 1 && counted.has(a.representedUnitId);
+  return all || narrowed;
+}
+
 export function AttendeesTable({ attendees, canEdit, meetingId }: { attendees: Attendee[]; canEdit: boolean; meetingId: string }) {
   const [pending, start] = useTransition();
   if (attendees.length === 0) return <p className="text-sm text-muted-foreground">Nobody checked in yet.</p>;
@@ -75,16 +95,8 @@ export function AttendeesTable({ attendees, canEdit, meetingId }: { attendees: A
               <div className="text-xs text-muted-foreground">{[a.roles, a.email].filter(Boolean).join(" · ")}</div>
             </TableCell>
             <TableCell className="align-top">
-              {a.confirmedUnitIds ? (
-                // They said which units at self check-in; claims count once approved.
-                <span className="text-sm">
-                  {a.confirmedLabels.join(", ") || (
-                    <span className="text-muted-foreground">No unit</span>
-                  )}
-                </span>
-              ) : a.units.length === 0 ? (
-                <span className="text-sm text-muted-foreground">No unit</span>
-              ) : canEdit && a.units.length > 1 ? (
+              {canEdit && narrowable(a) ? (
+                // Someone with several units: an editor can say they came for just one.
                 <Select
                   value={a.representedUnitId ?? ALL_UNITS}
                   disabled={pending}
@@ -103,11 +115,7 @@ export function AttendeesTable({ attendees, canEdit, meetingId }: { attendees: A
                   </SelectContent>
                 </Select>
               ) : (
-                <span className="text-sm">
-                  {a.representedUnitId
-                    ? a.units.find((u) => u.id === a.representedUnitId)?.label
-                    : a.units.map((u) => u.label).join(", ")}
-                </span>
+                <span className="text-sm">{countedLabels(a) || <span className="text-muted-foreground">No unit</span>}</span>
               )}
             </TableCell>
             <TableCell className="hidden align-top text-sm text-muted-foreground md:table-cell">
@@ -178,7 +186,7 @@ export function ExportMeetingButton({
             name: a.name,
             email: a.email,
             units: a.units.map((u) => u.label),
-            representing: a.units.find((u) => u.id === a.representedUnitId)?.label ?? null,
+            representing: countedLabels(a) || null,
             method: a.method,
           })),
         );

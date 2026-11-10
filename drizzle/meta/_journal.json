@@ -99,6 +99,13 @@
       "when": 1794273562391,
       "tag": "0013_self_check_in_record_units",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794274691375,
+      "tag": "0014_check_ins_keep_units",
+      "breakpoints": true
     }
   ]
 }
