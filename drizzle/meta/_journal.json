@@ -92,6 +92,13 @@
       "when": 1794076950515,
       "tag": "0012_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794273562391,
+      "tag": "0013_self_check_in_record_units",
+      "breakpoints": true
     }
   ]
 }

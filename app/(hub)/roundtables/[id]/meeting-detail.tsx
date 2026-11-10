@@ -79,7 +79,7 @@ export function AttendeesTable({ attendees, canEdit, meetingId }: { attendees: A
                 // They said which units at self check-in; claims count once approved.
                 <span className="text-sm">
                   {a.confirmedLabels.join(", ") || (
-                    <span className="text-muted-foreground">No unit tonight</span>
+                    <span className="text-muted-foreground">No unit</span>
                   )}
                 </span>
               ) : a.units.length === 0 ? (

@@ -191,33 +191,29 @@ function Confirm({
   person: Person;
   units: UnitChoice[];
   pending: boolean;
-  onSubmit: (c: { representing: string[]; leaving: string[]; adding: Claim[] }) => void;
+  onSubmit: (c: { leaving: string[]; adding: Claim[] }) => void;
 }) {
-  // Start from what they said last time tonight, or else every unit that's theirs.
-  const initial = person.representing ?? person.units.map((u) => u.id);
-  const [representing, setRepresenting] = useState<string[]>(initial);
-  const [leaving, setLeaving] = useState<string[]>([]);
+  // They represent every unit on their record. This is only a chance to correct it:
+  // a unit they've left, or one that's missing.
+  const [leaving, setLeaving] = useState<string[]>(person.leaving);
   const [adding, setAdding] = useState<Claim[]>([]);
   const [editing, setEditing] = useState(!person.alreadyIn);
   const label = (id: string) => units.find((u) => u.id === id)?.label ?? person.units.find((u) => u.id === id)?.label ?? "";
-  const tonight = [...representing.map(label), ...adding.map((a) => label(a.unitId))].filter(Boolean);
-  const toggle = (id: string, on: boolean) => setRepresenting((r) => (on ? [...r, id] : r.filter((x) => x !== id)));
-  const changed = leaving.length > 0 || adding.length > 0 || representing.length !== initial.length || representing.some((id) => !initial.includes(id));
+  const tonight = [...person.units.filter((u) => !leaving.includes(u.id)).map((u) => u.label), ...adding.map((a) => label(a.unitId))].filter(Boolean);
+  const changed = adding.length > 0 || leaving.length !== person.leaving.length || leaving.some((id) => !person.leaving.includes(id));
+  const summary = tonight.length ? `for ${listUnits(tonight)}` : "without a unit";
 
-  // Already checked in: show what they said, and let them confirm or change it.
+  // Already checked in: show what counts, and let them confirm or change it.
   if (!editing) {
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-lg font-medium">Hi {person.firstName}. You&apos;re already checked in.</p>
-        <p className="rounded-xl bg-muted/50 p-3 text-sm">
-          {tonight.length ? `You're representing ${listUnits(tonight)} tonight.` : "You checked in without representing a unit tonight."}
-        </p>
+        <p className="text-lg font-medium">Hi {person.firstName}. You&apos;re already checked in {summary}.</p>
         <div className="grid grid-cols-2 gap-2">
-          <Button size="lg" disabled={pending} onClick={() => onSubmit({ representing, leaving: [], adding: [] })}>
+          <Button size="lg" disabled={pending} onClick={() => onSubmit({ leaving, adding: [] })}>
             Looks right
           </Button>
           <Button size="lg" variant="outline" disabled={pending} onClick={() => setEditing(true)}>
-            Change my units
+            Fix my units
           </Button>
         </div>
       </div>
@@ -229,45 +225,34 @@ function Confirm({
       className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit({ representing, leaving, adding });
+        onSubmit({ leaving, adding });
       }}
     >
       <p className="text-lg font-medium">Hi {person.firstName}.</p>
       <p className="rounded-xl bg-muted/50 p-3 text-sm" aria-live="polite">
-        {tonight.length
-          ? `You're checking in and representing ${listUnits(tonight)}.`
-          : person.units.length
-            ? "You're checking in without representing a unit tonight."
-            : "We don't have a unit on your record. Which unit are you representing tonight? Add it below, or check in without one."}
-        {person.units.length === 1 && adding.length === 0 && representing.length === 1 && " Representing more than one? Add them below."}
+        {person.units.length || adding.length
+          ? `You're checking in ${summary}.`
+          : "We don't have a unit on your record. If you're with one, add it below, or check in without one."}
       </p>
       {person.units.length > 0 && (
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-medium">Your units</legend>
+          <legend className="mb-1 text-sm font-medium">Your units. Anything out of date?</legend>
           {person.units.map((u) => {
             const gone = leaving.includes(u.id);
             return (
               <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={representing.includes(u.id)} disabled={gone} onCheckedChange={(on) => toggle(u.id, on === true)} />
-                  <span className={gone ? "text-muted-foreground line-through" : ""}>
-                    {u.label}
-                    {u.role && <span className="text-muted-foreground"> · {u.role}</span>}
-                    {u.pending && <span className="block text-xs text-muted-foreground">Waiting to be added to your record</span>}
-                  </span>
-                </label>
-                {!u.pending && (
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground underline underline-offset-2"
-                    onClick={() => {
-                      setLeaving((l) => (gone ? l.filter((x) => x !== u.id) : [...l, u.id]));
-                      if (!gone) toggle(u.id, false);
-                    }}
-                  >
-                    {gone ? "Undo" : "Not with this unit anymore"}
-                  </button>
-                )}
+                <span className={`text-sm ${gone ? "text-muted-foreground line-through" : ""}`}>
+                  {u.label}
+                  {u.role && <span className="text-muted-foreground"> · {u.role}</span>}
+                  {u.pending && <span className="block text-xs text-muted-foreground">Waiting to be added to your record</span>}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline underline-offset-2"
+                  onClick={() => setLeaving((l) => (gone ? l.filter((x) => x !== u.id) : [...l, u.id]))}
+                >
+                  {gone ? "Undo" : u.pending ? "Remove" : "Not with this unit anymore"}
+                </button>
               </div>
             );
           })}
