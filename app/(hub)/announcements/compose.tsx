@@ -182,6 +182,11 @@ export function Compose({
     if (!t) return;
     if (body.trim() && !window.confirm("Replace what you've written with this template?")) return;
     setBody(t.body);
+    // A recap goes to the people who came: start from the latest roundtable's list.
+    if (t.key === "recap" && !audience) {
+      const latest = audiences.find((a) => a.key.startsWith("came:"));
+      if (latest) setAudience(latest.key);
+    }
     if (fromTemplate(subject, "subject")) setSubject(t.subject);
     if (fromTemplate(previewText, "previewText")) setPreviewText(t.previewText);
   }
