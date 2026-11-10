@@ -373,6 +373,7 @@ Built as planned (migration 0011 `rsvp`). The page takes RSVPs from when the lin
 ### After the first real roundtable (built)
 
 - **Matched people represent their record units, always.** The check-in page used to show each unit as a ticked box, and a tap to "confirm" unticked it, so people checked in with no unit. Now it lists their units with "Not with this unit anymore" and "Representing another unit?", and that's all: every unit on their record counts unless they say they've left it (which goes to an editor and stays remembered until resolved). Someone checked in at the door first gets the same. Migration 0013 gave earlier self check-ins their record units back, except units the person said they'd left.
+- **One rule for every check-in.** However someone was checked in (by a volunteer, on their phone, from a pasted list or an old sheet), the check-in keeps the units it counts (`lib/attendance/check-in-units.ts`): the unit named on it, or every unit on their record. A unit added to someone later, by hand, by approving their claim, or from a roster import, counts for their check-ins this scouting year only; earlier years stay as they were, since people move between units. A check-in an editor narrowed to one unit stays narrowed. Migration 0014 kept exactly what older check-ins counted.
 
 ### 6D. Reminders (built)
 

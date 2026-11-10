@@ -5,7 +5,8 @@ import { writeAudit } from "@/lib/audit";
 import type { CurrentUser } from "@/lib/auth/session";
 import { createContact, type NewContactInput } from "@/lib/contacts/mutations";
 import { db } from "@/lib/db";
-import { attendance, contact, MEETING_FORMATS, MEETING_STATUSES, meeting, unit } from "@/lib/db/schema";
+import { attendance, attendanceUnit, contact, MEETING_FORMATS, MEETING_STATUSES, meeting, unit } from "@/lib/db/schema";
+import { countCheckInUnits } from "./check-in-units";
 import { isUpcoming } from "./schedule";
 import { appToday } from "./today";
 import { meetingDateLabel } from "./year";
@@ -109,11 +110,16 @@ export async function checkIn(
   if (isUpcoming(m.date, appToday())) return { ok: false, message: `That meeting isn't until ${meetingDateLabel(m.date)}. Check-in opens on the day.` };
   const [c] = await db.select({ id: contact.id }).from(contact).where(eq(contact.id, contactId));
   if (!c) return { ok: false, message: "That contact no longer exists." };
-  const [row] = await db
-    .insert(attendance)
-    .values({ meetingId, contactId, method, checkedInBy: actor.id })
-    .onConflictDoNothing()
-    .returning({ id: attendance.id });
+  const row = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(attendance)
+      .values({ meetingId, contactId, method, checkedInBy: actor.id })
+      .onConflictDoNothing()
+      .returning({ id: attendance.id });
+    // They count for every unit on their record, the same as checking in themselves.
+    if (inserted) await countCheckInUnits(tx, [{ id: inserted.id, contactId, unitId: null }]);
+    return inserted;
+  });
   return row ? { ok: true, message: "Checked in.", id: row.id } : { ok: true, message: "Already checked in.", alreadyIn: true };
 }
 
@@ -127,8 +133,19 @@ export async function setRepresentedUnit(_actor: CurrentUser, attendanceId: stri
     const [u] = await db.select({ id: unit.id }).from(unit).where(eq(unit.id, unitId));
     if (!u) return { ok: false, message: "That unit no longer exists." };
   }
-  const updated = await db.update(attendance).set({ unitId }).where(eq(attendance.id, attendanceId)).returning({ id: attendance.id });
-  return updated.length ? { ok: true, message: "Saved." } : { ok: false, message: "That check-in no longer exists." };
+  // Narrowed to one unit, or back to all of theirs. Units they claimed (still in review) stay.
+  const updated = await db.transaction(async (tx) => {
+    const [a] = await tx
+      .update(attendance)
+      .set({ unitId })
+      .where(eq(attendance.id, attendanceId))
+      .returning({ id: attendance.id, contactId: attendance.contactId });
+    if (!a) return false;
+    await tx.delete(attendanceUnit).where(and(eq(attendanceUnit.attendanceId, a.id), eq(attendanceUnit.approved, true)));
+    await countCheckInUnits(tx, [{ id: a.id, contactId: a.contactId, unitId }]);
+    return true;
+  });
+  return updated ? { ok: true, message: "Saved." } : { ok: false, message: "That check-in no longer exists." };
 }
 
 /** Adds someone new as a walk-in and checks them in. If they're already a contact, just checks them in. */

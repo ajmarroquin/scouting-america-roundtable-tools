@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { writeAudit } from "@/lib/audit";
 import type { CurrentUser } from "@/lib/auth/session";
+import { countNewUnitsThisYear } from "@/lib/attendance/check-in-units";
 import { db, type Tx } from "@/lib/db";
 import { affiliation, contact, importRun, setting, unit } from "@/lib/db/schema";
 import { importPayloadSchema, type ImportPayload } from "./payload";
@@ -190,6 +191,15 @@ export async function commitImport(actor: CurrentUser, raw: unknown) {
       );
     const contactIds = new Map(idRows.map((r) => [r.memberId, r.id]));
 
+    // Which units each person had before, so units the roster adds can count for this year's check-ins.
+    const before = idRows.length
+      ? await tx
+          .selectDistinct({ contactId: affiliation.contactId, unitId: affiliation.unitId })
+          .from(affiliation)
+          .where(inArray(affiliation.contactId, idRows.map((r) => r.id)))
+      : [];
+    const had = new Set(before.map((b) => `${b.contactId}|${b.unitId}`));
+
     // Imports own their affiliations: replace them. Hand-added ones stay.
     if (idRows.length) {
       await tx
@@ -217,6 +227,7 @@ export async function commitImport(actor: CurrentUser, raw: unknown) {
         ];
       }),
     );
+    const newUnits = new Map(affRows.filter((a) => a.unitId && !had.has(`${a.contactId}|${a.unitId}`)).map((a) => [`${a.contactId}|${a.unitId}`, a]));
     for (const batch of chunks(affRows)) {
       await tx
         .insert(affiliation)
@@ -232,6 +243,8 @@ export async function commitImport(actor: CurrentUser, raw: unknown) {
           },
         });
     }
+    // A unit the roster gives someone counts for their check-ins this scouting year.
+    await countNewUnitsThisYear(tx, [...newUnits.values()]);
 
     if (plan.missing.length) {
       await tx

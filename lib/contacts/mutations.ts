@@ -5,6 +5,7 @@ import { writeAudit } from "@/lib/audit";
 import type { CurrentUser } from "@/lib/auth/session";
 import { db, type Tx } from "@/lib/db";
 import { affiliation, contact, setting, unit } from "@/lib/db/schema";
+import { countNewUnitsThisYear } from "@/lib/attendance/check-in-units";
 import { cleanEmail, formatPhone } from "@/lib/import/normalize";
 import { type AffiliationInput, affiliationInputSchema } from "./affiliation-input";
 import { contactName } from "./format";
@@ -113,6 +114,8 @@ async function insertAffiliations(tx: Tx, actor: CurrentUser, contactId: string,
     if (row) added.push({ unitId, position: a.position });
   }
   if (added.length) await writeAudit(actor, "affiliation.add", { type: "contact", id: contactId }, { added }, tx);
+  // A unit added after they checked in counts for their check-ins this scouting year.
+  await countNewUnitsThisYear(tx, added.map((a) => ({ contactId, unitId: a.unitId })));
   return added.length;
 }
 

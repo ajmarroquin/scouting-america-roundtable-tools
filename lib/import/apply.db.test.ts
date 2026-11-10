@@ -1030,6 +1030,51 @@ describe.skipIf(!local)("import against Postgres", () => {
     expect(await rem.sendReminderNow(actor, week.id, mailer)).toMatchObject({ ok: false, message: expect.stringContaining("already gone out") });
   });
 
+  it("counts every check-in the same way, and a unit added later counts this scouting year only", async () => {
+    const att = await import("@/lib/attendance/mutations");
+    const contacts = await import("@/lib/contacts/mutations");
+    const queries = await import("@/lib/attendance/queries");
+    const sci = await import("@/lib/selfcheckin/service");
+    const [u1, u2, u3] = await sci.unitChoices();
+    const base = { title: "", format: "in_person" as const, status: "held" as const, notes: "", startTime: "19:00", endTime: "20:30" };
+    // Today is Feb 1, 2027: the 2026-27 scouting year. May 2026 was last year.
+    const lastYear = (await att.createMeeting(actor, { ...base, date: "2026-05-21" })).id!;
+    const thisYear = (await att.createMeeting(actor, { ...base, date: "2027-01-14" })).id!;
+    const made = await contacts.createContact(actor, {
+      firstName: "Casey",
+      lastName: "Counter",
+      email: "casey.counter@example.org",
+      phone: "",
+      isYouth: false,
+      guardianEmail: "",
+      affiliations: [{ unit: { kind: "existing", id: u1.id }, position: "Committee Member" }],
+      source: "manual",
+    });
+    const casey = made.id!;
+    await att.checkIn(actor, lastYear, casey);
+    await att.checkIn(actor, thisYear, casey);
+    const counted = async (meetingId: string) =>
+      ((await queries.getMeeting(meetingId))!.attendees.find((a) => a.contactId === casey)!.confirmedUnitIds ?? []).sort();
+    // A volunteer's check-in keeps the units it counts, like a self check-in.
+    expect(await counted(lastYear)).toEqual([u1.id]);
+    expect(await counted(thisYear)).toEqual([u1.id]);
+
+    // A unit added afterwards counts for this year's check-ins, not last year's.
+    expect(await contacts.addAffiliation(actor, casey, { unit: { kind: "existing", id: u2.id }, position: "Committee Member" })).toMatchObject({ ok: true });
+    expect(await counted(thisYear)).toEqual([u1.id, u2.id].sort());
+    expect(await counted(lastYear)).toEqual([u1.id]);
+
+    // Narrowed to one unit by an editor, it stays narrowed when another unit is added; "All" brings back every unit.
+    const row = (await queries.getMeeting(thisYear))!.attendees.find((a) => a.contactId === casey)!;
+    expect(await att.setRepresentedUnit(actor, row.attendanceId, u1.id)).toMatchObject({ ok: true });
+    expect(await counted(thisYear)).toEqual([u1.id]);
+    await contacts.addAffiliation(actor, casey, { unit: { kind: "existing", id: u3.id }, position: "Committee Member" });
+    expect(await counted(thisYear)).toEqual([u1.id]);
+    await att.setRepresentedUnit(actor, row.attendanceId, null);
+    expect(await counted(thisYear)).toEqual([u1.id, u2.id, u3.id].sort());
+    expect(await counted(lastYear)).toEqual([u1.id]);
+  });
+
   it("compares a list with contacts and adds the people it's missing", async () => {
     const lists = await import("@/lib/contacts/list-compare");
     const { compareToContacts } = await import("@/lib/contacts/compare");
